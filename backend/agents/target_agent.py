@@ -1,24 +1,19 @@
 """
-target_agent.py — Mode 2: target evaluation and outbound email drafting.
+agents/target_agent.py — Mode 2: target evaluation and outbound email drafting.
 
-Agent loop:
-  1. CHECK CACHE   → return if we've already profiled this target+persona
-  2. MAP + SELECT  → discover target's pages, filter deterministically
-  3. FETCH         → Firecrawl scrapes pages + hardcoded web searches
-  4. CHUNK+EMBED   → RecursiveCharacterTextSplitter + text-embedding-3-small
-  5. EVALUATE FIT  → Claude scores target against sender's ICP
-  6. DRAFT EMAILS  → Claude writes email A (pain-led) + B (trigger-led)
-  7. BUILD CLAIM MAP → every factual claim → source URL + snippet
-  8. CACHE WRITE   → save for future runs
+ReAct loop using Anthropic's native tool use API.
 
-What we removed vs v1:
-  - The Claude planning call (_plan_target_research) is gone.
-    We hardcode the web search queries because we already know what signals
-    matter: funding, hiring, news. Claude shouldn't decide this.
+The loop:
+  1. Call Claude with system prompt + tools + sender ICP + target URL + persona
+  2. Claude returns tool_use block → execute tool → append observation → repeat
+  3. Claude calls finish() → extract fit result → check threshold
+  4. If fit_score >= 50 → dedicated email synthesis call → return full result
+  5. If fit_score < 50  → return fit result only, skip emails
 
-  - Page selection is deterministic (select_pages), not LLM-driven.
-
-  - Research goal is a hardcoded string — we know what we're looking for.
+Hard threshold rationale:
+  The decision to generate emails or not is a business rule, not a
+  reasoning task. It belongs in code, not in the agent's system prompt.
+  Claude evaluates fit; Python enforces the threshold.
 """
 
 import json
@@ -26,99 +21,49 @@ import os
 import anthropic
 from dotenv import load_dotenv
 
-from tools.cache import cache_get, cache_set, cache_set_pages, cache_get_pages
-from tools.firecrawl_client import map_site, scrape_pages, search_web, select_pages
-from tools.chunker import extract_relevant_snippets, format_snippets_for_prompt
-from prompts.prompts import FIT_EVALUATION_PROMPT, EMAIL_GENERATION_PROMPT
+from tools.definitions import TARGET_TOOLS
+from tools.implementations import scrape_page, search_web
+from prompts.prompts import TARGET_SYSTEM_PROMPT, EMAIL_GENERATION_PROMPT
 
 load_dotenv()
 
-_client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-
-# Hardcoded research goal for target signal extraction.
-# These are the signals that always matter for ICP fit — no LLM needed to decide.
-TARGET_RESEARCH_GOAL = (
-    "company size, employee count, industry vertical, business model B2B or B2C, "
-    "funding stage, recent funding rounds, revenue or growth signals, "
-    "sales team existence, outbound sales motion, tech stack, "
-    "pain points, hiring signals, recent news or press releases"
-)
+_client        = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+MODEL          = "claude-sonnet-4-20250514"
+MAX_TOKENS     = 4096
+MAX_ITERATIONS = 12
+FIT_THRESHOLD  = 50
 
 
-def _build_web_searches(company_name: str) -> list[str]:
-    """
-    Hardcoded web search queries for external signals.
-    We know exactly what external signals matter — funding, hiring, news.
-    No LLM needed to generate these queries.
-    """
-    return [
-        f"{company_name} funding round 2024 2025",
-        f"{company_name} sales team hiring",
-        f"{company_name} recent news announcement",
-    ]
+def _execute_tool(name: str, inputs: dict) -> str:
+    """Route a tool call to its implementation."""
+    if name == "scrape_page":
+        return scrape_page(inputs["url"], inputs["goal"])
+    elif name == "search_web":
+        return search_web(inputs["query"], inputs["goal"])
+    else:
+        return f"Unknown tool: {name}"
 
 
-def _extract_company_name(url: str) -> str:
-    """Best-effort company name from URL for search queries."""
-    domain = url.split("://")[-1].split("/")[0]
-    domain = domain.removeprefix("www.")
-    return domain.split(".")[0].capitalize()
-
-
-def _get_sender_icp(sender_url: str) -> dict:
-    """Retrieve sender's ICP from cache (computed in Mode 1)."""
-    if not sender_url.startswith("http"):
-        sender_url = "https://" + sender_url
-    cached = cache_get(sender_url)
-    if cached:
-        return {
-            "value_prop": cached.get("value_prop", ""),
-            "icp": cached.get("icp", {}),
-        }
-    return {}
-
-
-def _evaluate_fit(
-    target_url: str,
-    role: str,
-    seniority: str,
-    icp: dict,
-    snippets: list[dict],
+def _generate_emails(
+    sender_url:      str,
+    value_prop:      str,
+    target_url:      str,
+    role:            str,
+    seniority:       str,
+    fit_result:      dict,
 ) -> dict:
-    """Claude evaluates how well the target fits the sender's ICP."""
-    formatted = format_snippets_for_prompt(snippets)
-    prompt = FIT_EVALUATION_PROMPT.format(
-        icp=json.dumps(icp, indent=2),
-        target_url=target_url,
-        role=role,
-        seniority=seniority,
-        snippets=formatted,
+    """
+    Dedicated synthesis call for email generation.
+    Only called if fit_score >= FIT_THRESHOLD.
+    Receives the fit result (including evidence_snippets) from the ReAct loop.
+    Claude's only job here is writing — all evidence was collected by the agent.
+    """
+    evidence_snippets = fit_result.get("evidence_snippets", [])
+    formatted_evidence = "\n\n".join(
+        f"[SOURCE: {s['source_url']}]\n{s['text']}"
+        for s in evidence_snippets
     )
-    response = _client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=1200,
-        messages=[{"role": "user", "content": prompt}]
-    )
-    raw = response.content[0].text.strip()
-    raw = raw.replace("```json", "").replace("```", "").strip()
-    try:
-        return json.loads(raw)
-    except Exception as e:
-        print(f"[target_agent] fit eval parse error: {e}")
-        return {"fit_score": 50, "fit_label": "Unknown", "fit_summary": "Could not evaluate."}
 
-
-def _draft_emails(
-    sender_url: str,
-    value_prop: str,
-    target_url: str,
-    role: str,
-    seniority: str,
-    fit_result: dict,
-    snippets: list[dict],
-) -> dict:
-    """Claude drafts two emails with different angles from retrieved evidence."""
-    formatted = format_snippets_for_prompt(snippets)
     prompt = EMAIL_GENERATION_PROMPT.format(
         sender_url=sender_url,
         value_prop=value_prop,
@@ -128,134 +73,185 @@ def _draft_emails(
         seniority=seniority,
         fit_summary=fit_result.get("fit_summary", ""),
         matched_signals=json.dumps(fit_result.get("matched_signals", []), indent=2),
-        snippets=formatted,
+        evidence_snippets=formatted_evidence,
     )
+
     response = _client.messages.create(
-        model="claude-sonnet-4-20250514",
+        model=MODEL,
         max_tokens=2000,
         messages=[{"role": "user", "content": prompt}]
     )
+
     raw = response.content[0].text.strip()
     raw = raw.replace("```json", "").replace("```", "").strip()
+
     try:
         return json.loads(raw)
     except Exception as e:
-        print(f"[target_agent] email parse error: {e}\nRaw: {raw[:300]}")
+        print(f"[target_agent] Email parse error: {e}")
         return {"email_a": {}, "email_b": {}}
 
 
 async def analyze_target(
-    sender_url: str,
-    target_url: str,
-    role: str,
-    seniority: str,
+    sender_url:  str,
+    sender_icp:  dict,
+    value_prop:  str,
+    target_url:  str,
+    role:        str,
+    seniority:   str,
 ) -> dict:
     """
-    Main entry point for Mode 2.
-    Returns: { fit_result, email_a, email_b, claim_map, snippets_used, cached }
+    Run the target ReAct agent.
+
+    Returns one of two shapes depending on fit score:
+
+    Poor fit (score < 50):
+      { fit_result, emails_generated: false, reason }
+
+    Good fit (score >= 50):
+      { fit_result, email_a, email_b, claim_map, emails_generated: true }
     """
     if not target_url.startswith("http"):
         target_url = "https://" + target_url
     if not sender_url.startswith("http"):
         sender_url = "https://" + sender_url
-    base = target_url.rstrip("/")
 
-    cache_persona_key = f"{role}_{seniority}".lower().replace(" ", "_").replace("/", "_")
-
-    # ── Step 1: Cache check ──────────────────────────────────────────────────
-    cached = cache_get(target_url)
-    if cached and cached.get(f"emails_{cache_persona_key}"):
-        print(f"[target_agent] Cache hit for {target_url} + {cache_persona_key}")
-        email_data = cached[f"emails_{cache_persona_key}"]
-        return {
-            "fit_result": cached.get("fit_result", {}),
-            "email_a": email_data.get("email_a", {}),
-            "email_b": email_data.get("email_b", {}),
-            "claim_map": email_data.get("claim_map", []),
-            "snippets_used": cached.get("snippets_used", []),
-            "pages_fetched": list(cached.get("pages", {}).keys()),
-            "cached": True,
-        }
-
-    print(f"[target_agent] Cache miss — starting agent loop for {target_url}")
-
-    # ── Tool B: Get sender ICP from cache ─────────────────────────────────────
-    sender_data = _get_sender_icp(sender_url)
-    icp = sender_data.get("icp", {})
-    value_prop = sender_data.get("value_prop", "")
-
-    # ── Step 2: Map + deterministic page selection ────────────────────────────
-    discovered = map_site(target_url, limit=30)
-    pages_to_fetch = select_pages(discovered, base, mode="target", limit=5)
-    print(f"[target_agent] Selected {len(pages_to_fetch)} pages: {pages_to_fetch}")
-
-    # ── Step 3: Fetch pages + hardcoded web searches ──────────────────────────
-    cached_pages = cache_get_pages(target_url) or {}
-    pages_to_scrape = [p for p in pages_to_fetch if p not in cached_pages]
-    scraped = scrape_pages(pages_to_scrape)
-
-    all_pages = {**cached_pages}
-    for page in scraped:
-        all_pages[page["url"]] = page["markdown"]
-    cache_set_pages(target_url, all_pages)
-
-    # Hardcoded web searches — we know what external signals matter
-    company_name = _extract_company_name(target_url)
-    search_queries = _build_web_searches(company_name)
-    search_results = []
-    for query in search_queries:
-        results = search_web(query, limit=3)
-        search_results.extend(results)
-    print(f"[target_agent] Got {len(search_results)} web search results for: {company_name}")
-
-    # Combine site pages + search results
-    page_objects = [{"url": u, "markdown": m} for u, m in all_pages.items()]
-    page_objects.extend(search_results)
-
-    # ── Step 4: Chunk + embed + similarity ranking ────────────────────────────
-    snippets = extract_relevant_snippets(page_objects, TARGET_RESEARCH_GOAL, top_k=15)
-    print(f"[target_agent] Selected {len(snippets)} relevant snippets via embeddings")
-
-    # ── Step 5: Evaluate fit (one Claude call) ────────────────────────────────
-    fit_result = _evaluate_fit(target_url, role, seniority, icp, snippets)
-    print(f"[target_agent] Fit score: {fit_result.get('fit_score')} — {fit_result.get('fit_label')}")
-
-    # ── Step 6: Draft emails (one Claude call) ────────────────────────────────
-    email_data = _draft_emails(
-        sender_url, value_prop, target_url, role, seniority, fit_result, snippets
+    # Initial message — gives the agent its full context upfront
+    initial_message = (
+        f"Research this target company and evaluate how well it fits our ICP.\n\n"
+        f"Target company: {target_url}\n"
+        f"Recipient persona: {role} ({seniority})\n\n"
+        f"Sender value proposition: {value_prop}\n\n"
+        f"Sender ICP (use this as your evaluation framework):\n"
+        f"{json.dumps(sender_icp, indent=2)}\n\n"
+        f"Start with the target's homepage to understand what they do, "
+        f"then research whatever signals you need to evaluate fit against the ICP."
     )
 
-    # ── Step 7: Build claim map ───────────────────────────────────────────────
-    claim_map = []
-    for email_key in ["email_a", "email_b"]:
-        email = email_data.get(email_key, {})
-        for claim in email.get("claims", []):
-            claim_map.append({
-                "email": email_key,
-                "angle": email.get("angle", email_key),
-                "claim": claim.get("claim", ""),
-                "source_url": claim.get("source_url", ""),
-                "snippet": claim.get("snippet", ""),
-            })
+    messages = [{"role": "user", "content": initial_message}]
 
-    # ── Step 8: Cache write ───────────────────────────────────────────────────
-    cache_set(target_url, {
-        "type": "target",
-        "fit_result": fit_result,
-        "snippets_used": snippets,
-        f"emails_{cache_persona_key}": {
-            "email_a": email_data.get("email_a", {}),
-            "email_b": email_data.get("email_b", {}),
-            "claim_map": claim_map,
-        },
-    })
+    pages_researched = []
+    iterations       = 0
 
+    print(f"[target_agent] Starting ReAct loop for {target_url}")
+
+    while iterations < MAX_ITERATIONS:
+        iterations += 1
+        print(f"[target_agent] Iteration {iterations}")
+
+        # ── Call Claude ──────────────────────────────────────────────────────
+        response = _client.messages.create(
+            model=MODEL,
+            max_tokens=MAX_TOKENS,
+            system=TARGET_SYSTEM_PROMPT,
+            tools=TARGET_TOOLS,
+            messages=messages,
+        )
+
+        # ── Append assistant response ─────────────────────────────────────────
+        messages.append({"role": "assistant", "content": response.content})
+
+        # ── Check stop reason ────────────────────────────────────────────────
+        if response.stop_reason == "end_turn":
+            print(f"[target_agent] end_turn without finish()")
+            return {
+                "fit_result":       {},
+                "emails_generated": False,
+                "reason":           "Agent ended without calling finish()",
+                "pages_researched": pages_researched,
+            }
+
+        # ── Process tool calls ────────────────────────────────────────────────
+        if response.stop_reason == "tool_use":
+            tool_results = []
+
+            for block in response.content:
+                if block.type != "tool_use":
+                    continue
+
+                tool_name   = block.name
+                tool_inputs = block.input
+                tool_use_id = block.id
+
+                print(f"[target_agent] Tool call: {tool_name}({json.dumps(tool_inputs)[:120]})")
+
+                # ── finish() — evaluate threshold, conditionally generate emails ──
+                if tool_name == "finish":
+                    fit_score  = tool_inputs.get("fit_score", 0)
+                    fit_result = tool_inputs
+
+                    print(f"[target_agent] finish() called — fit score: {fit_score}")
+                    print(f"[target_agent] Completed in {iterations} iterations")
+
+                    # Hard threshold — business rule, not agent reasoning
+                    if fit_score < FIT_THRESHOLD:
+                        print(f"[target_agent] Score {fit_score} < {FIT_THRESHOLD} — skipping emails")
+                        return {
+                            "fit_result":       fit_result,
+                            "emails_generated": False,
+                            "reason":           (
+                                f"Target scored {fit_score}/100 — below the {FIT_THRESHOLD} "
+                                f"threshold for email generation. "
+                                f"{fit_result.get('fit_summary', '')}"
+                            ),
+                            "pages_researched": pages_researched,
+                            "iterations":       iterations,
+                        }
+
+                    # Score passes threshold — generate emails
+                    print(f"[target_agent] Score {fit_score} >= {FIT_THRESHOLD} — generating emails")
+                    email_data = _generate_emails(
+                        sender_url=sender_url,
+                        value_prop=value_prop,
+                        target_url=target_url,
+                        role=role,
+                        seniority=seniority,
+                        fit_result=fit_result,
+                    )
+
+                    # Build claim map from email claims
+                    claim_map = []
+                    for email_key in ["email_a", "email_b"]:
+                        email = email_data.get(email_key, {})
+                        for claim in email.get("claims", []):
+                            claim_map.append({
+                                "email":      email_key,
+                                "angle":      email.get("angle", email_key),
+                                "claim":      claim.get("claim", ""),
+                                "source_url": claim.get("source_url", ""),
+                                "snippet":    claim.get("snippet", ""),
+                            })
+
+                    return {
+                        "fit_result":       fit_result,
+                        "email_a":          email_data.get("email_a", {}),
+                        "email_b":          email_data.get("email_b", {}),
+                        "claim_map":        claim_map,
+                        "emails_generated": True,
+                        "pages_researched": pages_researched,
+                        "iterations":       iterations,
+                    }
+
+                # ── Execute scrape_page or search_web ─────────────────────────
+                result = _execute_tool(tool_name, tool_inputs)
+
+                if tool_name == "scrape_page":
+                    pages_researched.append(tool_inputs.get("url", ""))
+
+                print(f"[target_agent] Tool result: {result[:200]}...")
+
+                tool_results.append({
+                    "type":        "tool_result",
+                    "tool_use_id": tool_use_id,
+                    "content":     result,
+                })
+
+            messages.append({"role": "user", "content": tool_results})
+
+    print(f"[target_agent] Max iterations ({MAX_ITERATIONS}) reached")
     return {
-        "fit_result": fit_result,
-        "email_a": email_data.get("email_a", {}),
-        "email_b": email_data.get("email_b", {}),
-        "claim_map": claim_map,
-        "snippets_used": snippets,
-        "pages_fetched": list(all_pages.keys()),
-        "cached": False,
+        "fit_result":       {},
+        "emails_generated": False,
+        "reason":           f"Max iterations ({MAX_ITERATIONS}) reached",
+        "pages_researched": pages_researched,
     }
