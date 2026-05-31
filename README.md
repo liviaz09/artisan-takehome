@@ -1,148 +1,96 @@
 # Outbound Intelligence Engine
 ### Artisan Applied AI Take-Home
 
-A web app that turns public company information into outbound strategy — built with an agentic retrieval pipeline, token-efficient snippet extraction, and evidence-grounded email generation.
+A web app that turns any public company website into a complete outbound strategy — ICP definition, account research, fit evaluation, and evidence-grounded email drafts.
 
 ---
 
-## Quick Start
+## Setup
 
-### 1. Clone & install
-
+### 1. Install dependencies
 ```bash
-cd artisan-takehome
-pip install -r requirements.txt
+pip3 install -r requirements.txt
 ```
 
-### 2. Set up environment variables
-
+### 2. Configure API keys
 ```bash
 cp .env.example .env
-# Edit .env and add your keys:
-# ANTHROPIC_API_KEY=sk-ant-...
-# FIRECRAWL_API_KEY=fc-...
+# Open .env and fill in your keys
 ```
 
-Get a Firecrawl API key (free, 1000 credits/month): https://firecrawl.dev
+You need two keys:
+- **Anthropic** — [console.anthropic.com/keys](https://console.anthropic.com/keys)
+- **OpenAI** — [platform.openai.com/api-keys](https://platform.openai.com/api-keys) (used for embeddings only)
 
-### 3. Run the backend
-
+### 3. Start the server
 ```bash
 cd backend
 uvicorn main:app --reload --port 8000
 ```
 
 ### 4. Open the app
+Navigate to **http://localhost:8000**
 
-Navigate to: **http://localhost:8000**
+---
+
+## How to use it
+
+**Step 1 — ICP Generation**
+
+Enter the sender company's website (e.g. `artisan.co`). The agent researches their public pages and produces a value proposition and structured ICP — target industries, company size bands, common triggers, likely buyers, pain points, and differentiators.
+
+**Step 2 — Outbound Drafting**
+
+Enter a target company's website and select a recipient persona (role + seniority). The agent researches the target, evaluates how well it fits the sender's ICP with a 0–100 score, and — if the score is 50 or above — generates two outbound emails with different angles plus an evidence panel mapping every factual claim to its source.
 
 ---
 
 ## Architecture
 
-### Agent Loop
+### Agent loop
+
+Both agents use Anthropic's native tool use API in a ReAct loop. Claude reasons about what to do next, calls a tool, observes the result, and repeats until it has enough evidence to call `finish()`.
 
 ```
-INPUT: Company URL
-       ↓
-[1] CACHE CHECK     → JSON file keyed by domain (24hr TTL)
-    Hit?  → return immediately (0 tokens used)
-    Miss? → continue
-       ↓
-[2] MAP SITE        → Firecrawl /map discovers all URLs on the site
-       ↓
-[3] PLAN            → Claude Haiku: "which pages matter for this goal?"
-                      Returns structured page list + research goals
-                      (cheap call, ~150 tokens output)
-       ↓
-[4] FETCH           → Firecrawl /scrape: JS-rendered clean Markdown
-                      Tool A (live web) + Tool B (cache for repeat pages)
-       ↓
-[5] CHUNK + FILTER  → Pages split into ~300-token overlapping chunks
-                      Claude Haiku scores chunks for relevance (0-10)
-                      Top-k chunks selected (synthesis never sees full pages)
-       ↓
-[6] SYNTHESIZE      → Claude Sonnet over snippets only:
-                      Mode 1: value prop + ICP JSON
-                      Mode 2: fit score + email A + email B + claim map
-       ↓
-[7] CACHE WRITE     → Result saved to leads_cache.json
+User goal
+  ↓
+Claude reasons → calls tool → observes result
+  ↓ (repeats until confident)
+Claude calls finish() → structured output returned
 ```
 
-### Two-Tool Pattern
+Claude drives all decisions: which pages to fetch, what to search for, when it has enough evidence. The loop ends when Claude calls `finish()`, not after a fixed number of steps.
 
-| Tool | Purpose | When used |
-|------|---------|-----------|
-| **Firecrawl** (live web) | JS-rendered page content, web-wide search | Cache miss, new pages |
-| **JSON cache** | Memory of previously analyzed companies | Cache hit, sender ICP lookup |
+### Tools
 
-### Token Optimization
+Each agent has three tools:
 
-The core constraint: *"answers must be based on retrieved snippets, not full-context stuffing."*
+| Tool | Description |
+|------|-------------|
+| `scrape_page(url, goal)` | Fetches a page via Jina AI Reader, chunks and embeds the content, returns only the snippets most relevant to the goal |
+| `search_web(query, goal)` | Searches via DuckDuckGo, returns relevant snippets from results |
+| `finish(...)` | Structured output mechanism — Claude calls this when it has enough evidence. Different schema per agent. |
 
-How we enforce it:
-- Pages average ~8,000 tokens of raw content
-- After chunking + relevance filtering, synthesis sees ~2,000-3,000 tokens
-- Planning calls use Claude Haiku (cheaper, faster) — only synthesis uses Sonnet
-- Cache eliminates all LLM calls on repeat runs
+### Token discipline
 
-### Why Firecrawl
+The `goal` parameter on `scrape_page` and `search_web` drives semantic filtering inside the tool. Pages are split into chunks via `RecursiveCharacterTextSplitter`, embedded via OpenAI `text-embedding-3-small`, and ranked by cosine similarity against the goal vector. Claude only ever sees the top-k relevant snippets — never full page content.
 
-Most company websites are JS-rendered SPAs. A naive HTTP fetch returns an empty `<div id="root">`. Firecrawl handles JS rendering and returns clean Markdown — no BeautifulSoup, no Playwright, no HTML parsing. This directly reduces token noise and setup friction.
+### Fit threshold
 
-### Why No Vector DB
-
-For <10 pages per run, cosine similarity over embeddings adds latency and infrastructure complexity with no measurable quality benefit over scored chunk selection. The interface is identical: `goal → relevant_chunks`. In production, this step becomes embeddings + vector store with no changes to the agent loop.
-
-### Why Manual Agent Loop (No LangChain)
-
-Control and transparency. Every step is explicit, every token cost is visible, every prompt is accessible. This is what you'd build in production when you own reliability and cost.
+After the target agent calls `finish()`, the fit score is checked against a hard threshold of 50. Below 50, the response returns the fit evaluation only and skips email generation entirely. This is a business rule enforced in code, not by the agent.
 
 ---
 
-## File Structure
+## Design decisions
 
-```
-artisan-takehome/
-├── backend/
-│   ├── main.py                  # FastAPI routes (thin layer)
-│   ├── leads_cache.json         # Created on first run
-│   ├── agents/
-│   │   ├── sender_agent.py      # Mode 1: ICP + value prop
-│   │   └── target_agent.py      # Mode 2: fit eval + email draft
-│   ├── tools/
-│   │   ├── firecrawl_client.py  # Firecrawl wrapper (Tool A)
-│   │   ├── chunker.py           # Chunk + relevance filter
-│   │   └── cache.py             # JSON cache (Tool B)
-│   └── prompts/
-│       └── prompts.py           # All LLM prompts, centralized
-└── frontend/
-    └── index.html               # Single-file React app
-```
+**Why Jina AI Reader instead of Firecrawl:**
+Jina is free with no quota limits — prefix any URL with `r.jina.ai/` and get clean markdown back. No API key required. In production, Firecrawl or a similar service would give higher reliability on complex JS-heavy sites.
 
----
+**Why DuckDuckGo instead of a search API:**
+Every search API worth using has either a cost or a tight free tier. DuckDuckGo's HTML endpoint requires no authentication and has no limits. In production this would be replaced with a proper search API for cleaner structured results.
 
-## Design Decisions
+**Why no LangChain agent framework:**
+The agent loop is implemented directly using Anthropic's tool use API. This keeps every step explicit, makes the code readable without framework knowledge, and gives full control over error handling and token usage. LangChain would abstract the tool loop behind framework conventions that are harder to explain and debug.
 
-### Email angles
-- **Pain-led (Email A)**: Opens by naming a specific inferred pain point. Works when signals point to a known struggle (job postings mentioning a problem, competitor mentions, growth friction).
-- **Trigger-led (Email B)**: Opens with a recent signal (funding, product launch, hiring surge). Works when there's a clear moment of change — timing makes the email feel less cold.
-
-### No few-shot prompting for emails
-Few-shot examples anchor the model to a style, killing the variability that makes A/B emails worth comparing. Rich instructions (role, constraints, angle) without examples preserve creative range.
-
-### Claim map
-Every factual claim in both emails is tagged with a source URL and supporting snippet. This makes the agent's reasoning auditable and prevents hallucinated claims from reaching the output.
-
----
-
-## In Production
-
-| Local (this demo) | Production |
-|---|---|
-| JSON file cache | Postgres + Redis |
-| Claude Haiku for planning/scoring | Same or cheaper model |
-| Claude Sonnet for synthesis | Same |
-| Sequential page fetching | Parallel async fetches |
-| Firecrawl scrape | Firecrawl (same API) |
-| Chunk relevance scoring via LLM | Embeddings + vector store |
+**Why no caching:**
+Caching is an infrastructure concern, not an intelligence concern. For a local demo it adds complexity without meaningfully improving what's being evaluated. In production: Postgres keyed by domain with a 24-hour TTL, invalidated on re-run.
