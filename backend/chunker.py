@@ -10,12 +10,6 @@ Pipeline:
   2. Embed all chunks + the goal in one batched OpenAI API call
   3. Cosine similarity between goal vector and each chunk vector
   4. Return top-k chunks above relevance threshold
-
-Why embedding model and not Claude:
-  Embedding models are purpose-built for semantic similarity.
-  They are not LLMs — they produce dense vectors, not text.
-  Cost is ~$0.00002 per 1K tokens vs ~$0.003 for Haiku.
-  Claude is reserved for reasoning only.
 """
 
 import os

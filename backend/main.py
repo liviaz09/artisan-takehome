@@ -1,8 +1,6 @@
 """
 main.py — FastAPI application.
-
-Thin route layer. All intelligence lives in the agents.
-Routes validate input, call agents, return results.
+Simple POST endpoints that return JSON when the agent finishes.
 """
 
 import os
@@ -25,44 +23,34 @@ app.add_middleware(
 )
 
 
-# ── Request models ────────────────────────────────────────────────────────────
-
 class SenderRequest(BaseModel):
     url: str
 
 
 class TargetRequest(BaseModel):
-    sender_url:  str
-    sender_icp:  dict
-    value_prop:  str
-    target_url:  str
-    role:        str
-    seniority:   str
+    sender_url: str
+    sender_icp: dict
+    value_prop: str
+    target_url: str
+    role:       str
+    seniority:  str
 
-
-# ── Routes ───────────────────────────────────────────────────────────────────
 
 @app.post("/api/analyze-sender")
 async def analyze_sender_route(req: SenderRequest):
-    """Mode 1: Analyze sender company, return value prop and ICP."""
     if not req.url.strip():
         raise HTTPException(status_code=400, detail="URL is required")
     try:
         return await analyze_sender(req.url.strip())
     except Exception as e:
-        print(f"[main] analyze_sender error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/analyze-target")
 async def analyze_target_route(req: TargetRequest):
-    """
-    Mode 2: Research target company against sender ICP.
-    Returns fit evaluation and — if score >= 50 — outbound emails + claim map.
-    """
     for field, val in [
         ("sender_url", req.sender_url), ("target_url", req.target_url),
-        ("role", req.role), ("seniority", req.seniority)
+        ("role", req.role), ("seniority", req.seniority),
     ]:
         if not val.strip():
             raise HTTPException(status_code=400, detail=f"{field} is required")
@@ -76,11 +64,8 @@ async def analyze_target_route(req: TargetRequest):
             seniority=req.seniority.strip(),
         )
     except Exception as e:
-        print(f"[main] analyze_target error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-
-# ── Serve frontend ────────────────────────────────────────────────────────────
 
 frontend_path = os.path.join(os.path.dirname(__file__), "..", "frontend")
 

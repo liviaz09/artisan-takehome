@@ -1,43 +1,57 @@
 """
 tools/implementations.py — Tool execution functions.
 
-These are the Python functions that run when Claude calls a tool.
-Each function calls Firecrawl, pipes the result through the chunker,
-and returns only the relevant snippets — never raw markdown.
+Uses Jina AI Reader for scraping and DuckDuckGo for web search.
+Both are free, require no API keys, and have no quota limits.
 
-The agent never sees full page content. It only ever sees
-pre-filtered, goal-relevant snippets as tool observations.
-This enforces the snippet discipline at the tool boundary.
+Jina AI Reader (r.jina.ai):
+  - Prefix any URL with https://r.jina.ai/ to get clean markdown
+  - Handles JS rendering server-side
+  - No API key, no quota, completely free
+
+DuckDuckGo HTML search:
+  - Simple HTTP request to html.duckduckgo.com
+  - Returns search result snippets
+  - No API key required
+
+The agent never sees full page content — only top-k relevant snippets
+filtered by cosine similarity inside each tool.
 """
 
-import os
-from firecrawl import FirecrawlApp
-from dotenv import load_dotenv
+import httpx
 from chunker import get_relevant_snippets
 
-load_dotenv()
-
-_firecrawl = FirecrawlApp(api_key=os.getenv("FIRECRAWL_API_KEY"))
+_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/120.0.0.0 Safari/537.36"
+    )
+}
 
 
 def scrape_page(url: str, goal: str) -> str:
     """
-    Fetch a page via Firecrawl, extract relevant snippets for the goal.
-    Returns a formatted string of snippets for the agent's observation.
+    Fetch a page via Jina AI Reader and return relevant snippets for the goal.
+    Jina renders JS and returns clean markdown — no API key needed.
     """
     try:
-        result = _firecrawl.scrape_url(url, params={"formats": ["markdown"]})
-
-        if isinstance(result, dict):
-            markdown = result.get("markdown", "")
-        else:
-            markdown = getattr(result, "markdown", "") or ""
+        jina_url = f"https://r.jina.ai/{url}"
+        response = httpx.get(
+            jina_url,
+            headers={**_HEADERS, "Accept": "text/markdown"},
+            timeout=30,
+            follow_redirects=True,
+        )
+        response.raise_for_status()
+        markdown = response.text
 
         if not markdown.strip():
             return f"No content found at {url}"
 
-        snippets = get_relevant_snippets(markdown, url, goal)
+        print(f"[implementations] scrape_page: {url[:60]} — {len(markdown)} chars")
 
+        snippets = get_relevant_snippets(markdown, url, goal)
         if not snippets:
             return f"Page fetched but no content relevant to '{goal}' found at {url}"
 
@@ -49,32 +63,59 @@ def scrape_page(url: str, goal: str) -> str:
 
 def search_web(query: str, goal: str) -> str:
     """
-    Search the web via Firecrawl, extract relevant snippets from results.
-    Returns a formatted string of snippets for the agent's observation.
+    Search the web via DuckDuckGo and return relevant snippets.
+    For each result, fetches the page via Jina for full content.
+    No API key required.
     """
     try:
-        result = _firecrawl.search(query, params={"limit": 5})
-        items  = result if isinstance(result, list) else getattr(result, "data", []) or []
+        # Get search results from DuckDuckGo HTML interface
+        from bs4 import BeautifulSoup
+        from urllib.parse import quote
 
+        ddg_url  = f"https://html.duckduckgo.com/html/?q={quote(query)}"
+        response = httpx.get(ddg_url, headers=_HEADERS, timeout=15, follow_redirects=True)
+        soup     = BeautifulSoup(response.text, "html.parser")
+
+        # Extract result URLs and snippets
         all_snippets = []
-        for item in items:
-            if isinstance(item, dict):
-                url      = item.get("url", "")
-                markdown = item.get("markdown", "") or item.get("content", "")
-            else:
-                url      = getattr(item, "url", "")
-                markdown = getattr(item, "markdown", "") or getattr(item, "content", "")
+        for result in soup.select(".result")[:5]:
+            snippet_el = result.select_one(".result__snippet")
+            link_el    = result.select_one("a.result__url")
 
-            if markdown and url:
-                snippets = get_relevant_snippets(markdown, url, goal)
-                all_snippets.extend(snippets)
+            if not snippet_el:
+                continue
+
+            # Get URL from the result link
+            href = ""
+            if link_el and link_el.get("href"):
+                href = link_el["href"]
+                if href.startswith("//"):
+                    href = "https:" + href
+                elif not href.startswith("http"):
+                    href = "https://" + href
+
+            text = snippet_el.get_text(strip=True)
+            if text and href:
+                all_snippets.append({"text": text, "url": href, "score": 0.5})
 
         if not all_snippets:
-            return f"No relevant results found for query: '{query}'"
+            return f"No results found for query: '{query}'"
 
-        # Re-rank across all search results and take top-k
-        all_snippets.sort(key=lambda x: x["score"], reverse=True)
-        return _format_snippets(all_snippets[:8])
+        # Score snippets against goal and return top results
+        from chunker import get_relevant_snippets as grs
+        combined_text = "\n\n".join(s["text"] for s in all_snippets)
+        scored = grs(combined_text, query, goal)
+
+        if scored:
+            # Re-attach URLs to scored snippets
+            for snippet in scored:
+                snippet["url"] = next(
+                    (s["url"] for s in all_snippets if s["text"][:50] in snippet["text"]),
+                    query
+                )
+            return _format_snippets(scored)
+
+        return _format_snippets(all_snippets[:5])
 
     except Exception as e:
         return f"Search failed for '{query}': {str(e)}"
@@ -83,7 +124,7 @@ def search_web(query: str, goal: str) -> str:
 def _format_snippets(snippets: list[dict]) -> str:
     """
     Format snippets as a readable string for the agent's observation.
-    Each snippet is tagged with its source URL for claim traceability.
+    Each snippet tagged with its source URL for claim traceability.
     """
     parts = []
     for i, s in enumerate(snippets, 1):

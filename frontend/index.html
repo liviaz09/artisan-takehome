@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Outbound Intelligence — Artisan Take-Home</title>
+  <title>Outbound Intelligence Engine</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&display=swap" rel="stylesheet" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
@@ -14,233 +14,196 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg:        #0a0a0f;
-      --bg2:       #111118;
-      --bg3:       #18181f;
-      --border:    #2a2a35;
-      --border2:   #3a3a48;
-      --text:      #e8e8f0;
-      --text2:     #8888a0;
-      --text3:     #5a5a70;
-      --accent:    #7c6af7;
-      --accent2:   #a594ff;
-      --green:     #34d399;
-      --green-bg:  #0a2a1e;
-      --amber:     #fbbf24;
-      --amber-bg:  #2a1e08;
-      --red:       #f87171;
-      --red-bg:    #2a0e0e;
-      --mono:      'DM Mono', monospace;
-      --sans:      'DM Sans', sans-serif;
+      --bg:       #0a0a0f;
+      --bg2:      #111118;
+      --bg3:      #18181f;
+      --border:   #2a2a35;
+      --border2:  #3a3a48;
+      --text:     #e8e8f0;
+      --text2:    #8888a0;
+      --text3:    #5a5a70;
+      --accent:   #7c6af7;
+      --accent2:  #a594ff;
+      --green:    #34d399;
+      --green-bg: #0a2a1e;
+      --amber:    #fbbf24;
+      --amber-bg: #2a1e08;
+      --red:      #f87171;
+      --red-bg:   #2a0e0e;
+      --mono:     'DM Mono', monospace;
+      --sans:     'DM Sans', sans-serif;
     }
 
     html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--sans); }
-    #root { min-height: 100vh; display: flex; flex-direction: column; }
+    #root { min-height: 100vh; }
 
-    /* Noise grain overlay */
-    body::before {
-      content: '';
-      position: fixed; inset: 0; z-index: 0;
-      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
-      pointer-events: none;
-    }
+    .app { max-width: 960px; margin: 0 auto; padding: 48px 24px 80px; }
 
-    /* ── Layout ── */
-    .app { position: relative; z-index: 1; max-width: 960px; margin: 0 auto; padding: 48px 24px 80px; }
+    /* Header */
+    .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; color: var(--accent); text-transform: uppercase; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+    .eyebrow::before { content: ''; display: block; width: 24px; height: 1px; background: var(--accent); }
+    h1 { font-size: clamp(28px, 4vw, 42px); font-weight: 300; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 12px; }
+    h1 span { color: var(--accent2); font-weight: 500; }
+    .subtitle { color: var(--text2); font-size: 15px; font-weight: 300; max-width: 520px; line-height: 1.6; margin-bottom: 40px; }
 
-    /* ── Header ── */
-    .header { margin-bottom: 48px; }
-    .header-eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; color: var(--accent); text-transform: uppercase; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
-    .header-eyebrow::before { content: ''; display: block; width: 24px; height: 1px; background: var(--accent); }
-    .header h1 { font-size: clamp(28px, 4vw, 42px); font-weight: 300; letter-spacing: -0.02em; line-height: 1.15; color: var(--text); }
-    .header h1 span { color: var(--accent2); font-weight: 500; }
-    .header-sub { margin-top: 12px; color: var(--text2); font-size: 15px; font-weight: 300; max-width: 520px; line-height: 1.6; }
+    /* Step tabs */
+    .tabs { display: flex; gap: 4px; background: var(--bg2); padding: 4px; border-radius: 10px; border: 1px solid var(--border); width: fit-content; margin-bottom: 32px; }
+    .tab { padding: 8px 20px; border-radius: 7px; border: none; cursor: pointer; font-family: var(--sans); font-size: 13px; font-weight: 500; background: transparent; color: var(--text2); transition: all 0.15s; }
+    .tab.active { background: var(--bg3); color: var(--text); border: 1px solid var(--border2); }
+    .tab:disabled { opacity: 0.4; cursor: not-allowed; }
 
-    /* ── Step tabs ── */
-    .steps { display: flex; gap: 4px; margin-bottom: 32px; background: var(--bg2); padding: 4px; border-radius: 10px; border: 1px solid var(--border); width: fit-content; }
-    .step-tab { padding: 8px 20px; border-radius: 7px; border: none; cursor: pointer; font-family: var(--sans); font-size: 13px; font-weight: 500; transition: all 0.15s; background: transparent; color: var(--text2); }
-    .step-tab.active { background: var(--bg3); color: var(--text); border: 1px solid var(--border2); }
-    .step-tab:disabled { opacity: 0.4; cursor: not-allowed; }
-
-    /* ── Cards ── */
+    /* Cards */
     .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 28px; margin-bottom: 20px; }
     .card-title { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; color: var(--text3); text-transform: uppercase; margin-bottom: 16px; }
 
-    /* ── Form inputs ── */
+    /* Form */
     .field { margin-bottom: 16px; }
-    .field label { display: block; font-size: 12px; font-weight: 500; color: var(--text2); margin-bottom: 6px; letter-spacing: 0.02em; }
-    .field input, .field select {
-      width: 100%; padding: 10px 14px; background: var(--bg3); border: 1px solid var(--border);
-      border-radius: 8px; color: var(--text); font-family: var(--mono); font-size: 13px;
-      outline: none; transition: border-color 0.15s;
-      appearance: none;
-    }
+    .field label { display: block; font-size: 12px; font-weight: 500; color: var(--text2); margin-bottom: 6px; }
+    .field input, .field select { width: 100%; padding: 10px 14px; background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-family: var(--mono); font-size: 13px; outline: none; transition: border-color 0.15s; appearance: none; }
     .field input::placeholder { color: var(--text3); }
     .field input:focus, .field select:focus { border-color: var(--accent); }
-    .field select { cursor: pointer; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%238888a0' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; padding-right: 36px; }
+    .field select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%238888a0' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; padding-right: 36px; cursor: pointer; }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
-    /* ── Buttons ── */
+    /* Buttons */
     .btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-family: var(--sans); font-size: 14px; font-weight: 500; transition: all 0.15s; }
     .btn-primary { background: var(--accent); color: #fff; }
-    .btn-primary:hover { background: var(--accent2); }
+    .btn-primary:hover:not(:disabled) { background: var(--accent2); }
     .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
     .btn-ghost { background: transparent; color: var(--text2); border: 1px solid var(--border); }
     .btn-ghost:hover { border-color: var(--border2); color: var(--text); }
 
-    /* ── Loading ── */
-    .loading { display: flex; align-items: center; gap: 12px; color: var(--text2); font-size: 14px; padding: 20px 0; }
+    /* Loading */
+    .loading { display: flex; align-items: center; gap: 12px; color: var(--text2); font-family: var(--mono); font-size: 13px; padding: 8px 0; }
     .spinner { width: 16px; height: 16px; border: 2px solid var(--border2); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0; }
     @keyframes spin { to { transform: rotate(360deg); } }
-    .loading-steps { display: flex; flex-direction: column; gap: 6px; }
-    .loading-step { font-family: var(--mono); font-size: 12px; color: var(--text3); display: flex; align-items: center; gap: 8px; }
-    .loading-step.active { color: var(--accent2); }
-    .loading-step.done { color: var(--green); }
-    .loading-step::before { content: '·'; }
-    .loading-step.active::before { content: '▸'; }
-    .loading-step.done::before { content: '✓'; }
 
-    /* ── Value prop output ── */
-    .value-prop-text { font-size: 20px; font-weight: 300; line-height: 1.5; color: var(--text); letter-spacing: -0.01em; border-left: 2px solid var(--accent); padding-left: 20px; margin-bottom: 24px; }
+    /* Error */
+    .error { background: var(--red-bg); border: 1px solid rgba(248,113,113,0.3); border-radius: 8px; padding: 14px 18px; color: var(--red); font-size: 13px; margin-bottom: 16px; }
 
-    /* ── ICP grid ── */
+    /* Value prop */
+    .value-prop { font-size: 20px; font-weight: 300; line-height: 1.5; letter-spacing: -0.01em; border-left: 2px solid var(--accent); padding-left: 20px; margin-bottom: 20px; }
+
+    /* ICP grid */
     .icp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
     @media (max-width: 600px) { .icp-grid { grid-template-columns: 1fr; } }
     .icp-field { background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
     .icp-field-label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; color: var(--text3); text-transform: uppercase; margin-bottom: 10px; }
-    .icp-field-items { display: flex; flex-wrap: wrap; gap: 6px; }
-    .tag { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 400; background: var(--bg2); border: 1px solid var(--border2); color: var(--text2); }
+    .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+    .tag { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 12px; background: var(--bg2); border: 1px solid var(--border2); color: var(--text2); }
 
-    /* ── Fit score ── */
-    .fit-bar-wrap { margin-bottom: 20px; }
+    /* Fit score */
     .fit-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 8px; }
-    .fit-score { font-size: 36px; font-weight: 300; font-family: var(--mono); color: var(--text); }
-    .fit-label { font-size: 12px; font-weight: 500; padding: 3px 10px; border-radius: 20px; }
-    .fit-label.strong { background: var(--green-bg); color: var(--green); border: 1px solid var(--green); }
-    .fit-label.good { background: var(--amber-bg); color: var(--amber); border: 1px solid var(--amber); }
-    .fit-label.partial { background: var(--amber-bg); color: var(--amber); border: 1px solid var(--amber); }
-    .fit-label.poor { background: var(--red-bg); color: var(--red); border: 1px solid var(--red); }
-    .fit-bar { height: 4px; background: var(--bg3); border-radius: 2px; overflow: hidden; }
-    .fit-bar-fill { height: 100%; border-radius: 2px; transition: width 1s ease; }
+    .fit-score { font-size: 36px; font-weight: 300; font-family: var(--mono); }
+    .fit-badge { font-size: 12px; font-weight: 500; padding: 3px 10px; border-radius: 20px; }
+    .fit-badge.strong { background: var(--green-bg); color: var(--green); border: 1px solid var(--green); }
+    .fit-badge.good   { background: var(--amber-bg); color: var(--amber); border: 1px solid var(--amber); }
+    .fit-badge.partial { background: var(--amber-bg); color: var(--amber); border: 1px solid var(--amber); }
+    .fit-badge.poor   { background: var(--red-bg); color: var(--red); border: 1px solid var(--red); }
+    .fit-bar { height: 4px; background: var(--bg3); border-radius: 2px; overflow: hidden; margin-bottom: 16px; }
+    .fit-bar-fill { height: 100%; border-radius: 2px; }
     .fit-summary { font-size: 14px; color: var(--text2); line-height: 1.6; margin-bottom: 16px; }
     .fit-signals { display: flex; flex-direction: column; gap: 8px; }
-    .fit-signal { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; }
-    .fit-signal-icon { color: var(--green); flex-shrink: 0; margin-top: 1px; }
-    .fit-signal-text { color: var(--text2); }
+    .fit-signal { display: flex; gap: 10px; font-size: 13px; }
+    .fit-signal-icon { color: var(--green); flex-shrink: 0; }
     .fit-signal-evidence { font-family: var(--mono); font-size: 11px; color: var(--text3); margin-top: 2px; }
+    .divider { height: 1px; background: var(--border); margin: 20px 0; }
 
-    /* ── Email cards ── */
-    .email-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+    /* Emails */
+    .email-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
     @media (max-width: 680px) { .email-grid { grid-template-columns: 1fr; } }
     .email-card { background: var(--bg3); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
     .email-card-header { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
-    .email-angle-badge { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; padding: 3px 8px; border-radius: 4px; }
-    .badge-pain { background: rgba(248,113,113,0.12); color: var(--red); border: 1px solid rgba(248,113,113,0.25); }
-    .badge-trigger { background: rgba(251,191,36,0.12); color: var(--amber); border: 1px solid rgba(251,191,36,0.25); }
-    .email-subject { font-size: 13px; font-weight: 500; color: var(--text); }
+    .angle-badge { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; padding: 3px 8px; border-radius: 4px; }
+    .angle-badge.pain    { background: rgba(248,113,113,0.12); color: var(--red); border: 1px solid rgba(248,113,113,0.25); }
+    .angle-badge.trigger { background: rgba(251,191,36,0.12); color: var(--amber); border: 1px solid rgba(251,191,36,0.25); }
     .email-body { padding: 18px; font-size: 13px; line-height: 1.75; color: var(--text2); white-space: pre-wrap; }
-    .email-copy-btn { margin: 0 18px 16px; }
+    .email-subject { font-weight: 500; color: var(--text); margin-bottom: 12px; font-size: 14px; }
+    .email-footer { padding: 0 18px 16px; }
 
-    /* ── Claim map ── */
+    /* Claim map */
     .claim-map { display: flex; flex-direction: column; gap: 10px; }
     .claim-item { background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
-    .claim-header { padding: 12px 16px; cursor: pointer; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; transition: background 0.1s; }
+    .claim-header { padding: 12px 16px; cursor: pointer; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
     .claim-header:hover { background: var(--bg2); }
     .claim-text { font-size: 13px; color: var(--text); line-height: 1.5; }
-    .claim-meta { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-    .claim-email-badge { font-family: var(--mono); font-size: 10px; padding: 2px 7px; border-radius: 3px; }
-    .badge-a { background: rgba(124,106,247,0.15); color: var(--accent2); border: 1px solid rgba(124,106,247,0.3); }
-    .badge-b { background: rgba(251,191,36,0.12); color: var(--amber); border: 1px solid rgba(251,191,36,0.25); }
-    .claim-chevron { color: var(--text3); transition: transform 0.2s; font-size: 12px; }
-    .claim-chevron.open { transform: rotate(180deg); }
+    .claim-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+    .claim-badge { font-family: var(--mono); font-size: 10px; padding: 2px 7px; border-radius: 3px; }
+    .claim-badge.a { background: rgba(124,106,247,0.15); color: var(--accent2); border: 1px solid rgba(124,106,247,0.3); }
+    .claim-badge.b { background: rgba(251,191,36,0.12); color: var(--amber); border: 1px solid rgba(251,191,36,0.25); }
+    .chevron { color: var(--text3); font-size: 12px; transition: transform 0.2s; }
+    .chevron.open { transform: rotate(180deg); }
     .claim-evidence { border-top: 1px solid var(--border); padding: 14px 16px; display: none; flex-direction: column; gap: 10px; }
     .claim-evidence.open { display: flex; }
     .claim-url { font-family: var(--mono); font-size: 11px; color: var(--accent); text-decoration: none; word-break: break-all; }
     .claim-url:hover { text-decoration: underline; }
     .claim-snippet { font-size: 12px; color: var(--text3); line-height: 1.6; font-style: italic; border-left: 2px solid var(--border2); padding-left: 12px; }
 
-    /* ── Cache badge ── */
-    .cache-badge { display: inline-flex; align-items: center; gap: 5px; font-family: var(--mono); font-size: 10px; color: var(--green); background: var(--green-bg); border: 1px solid rgba(52,211,153,0.3); padding: 3px 8px; border-radius: 4px; margin-bottom: 16px; }
-
-    /* ── Error ── */
-    .error-box { background: var(--red-bg); border: 1px solid rgba(248,113,113,0.3); border-radius: 8px; padding: 14px 18px; color: var(--red); font-size: 13px; margin-bottom: 16px; }
-
-    /* ── Divider ── */
-    .divider { height: 1px; background: var(--border); margin: 24px 0; }
-
-    /* ── Pages fetched ── */
-    .pages-fetched { display: flex; flex-wrap: wrap; gap: 6px; }
+    /* Pages */
+    .page-tags { display: flex; flex-wrap: wrap; gap: 6px; }
     .page-tag { font-family: var(--mono); font-size: 10px; padding: 2px 8px; border-radius: 4px; background: var(--bg3); border: 1px solid var(--border); color: var(--text3); word-break: break-all; }
 
-    /* ── Transitions ── */
-    .fade-in { animation: fadeIn 0.3s ease; }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+    /* Sender context banner */
+    .context-banner { background: var(--bg2); border: 1px solid rgba(124,106,247,0.3); border-radius: 12px; padding: 16px 20px; margin-bottom: 20px; font-size: 13px; color: var(--text2); line-height: 1.6; }
+    .context-banner-label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; color: var(--accent); text-transform: uppercase; margin-bottom: 6px; }
 
-    /* ── Scrollbar ── */
-    ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: var(--bg); } ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+    /* Misc */
+    .fade-in { animation: fadeIn 0.3s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
   </style>
 </head>
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const { useState, useEffect, useCallback } = React;
+const { useState } = React;
 const API = 'http://localhost:8000';
 
 const ROLES = [
-  'VP of Sales', 'VP of Marketing', 'VP of Engineering', 'VP of Product',
-  'Head of Revenue Operations', 'Head of Growth', 'Head of Business Development',
-  'Chief Revenue Officer', 'Chief Marketing Officer', 'Chief Technology Officer',
-  'Director of Sales', 'Director of Marketing', 'Director of Operations',
-  'Sales Manager', 'Marketing Manager', 'Product Manager',
-  'Founder / CEO', 'Co-founder',
+  'VP of Sales','VP of Marketing','VP of Engineering','VP of Product',
+  'Head of Revenue Operations','Head of Growth','Head of Business Development',
+  'Chief Revenue Officer','Chief Marketing Officer','Chief Technology Officer',
+  'Director of Sales','Director of Marketing','Director of Operations',
+  'Sales Manager','Marketing Manager','Product Manager','Founder / CEO','Co-founder',
 ];
 
 const SENIORITIES = [
-  'C-Suite / Executive', 'VP / Director', 'Manager / Lead', 'Individual Contributor'
+  'C-Suite / Executive','VP / Director','Manager / Lead','Individual Contributor'
 ];
 
 function Spinner() {
   return <div className="spinner" />;
 }
 
-function LoadingState({ steps, activeStep }) {
-  return (
-    <div className="loading">
-      <Spinner />
-      <div className="loading-steps">
-        {steps.map((s, i) => (
-          <div key={i} className={`loading-step ${i === activeStep ? 'active' : i < activeStep ? 'done' : ''}`}>
-            {s}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function Tag({ children }) {
   return <span className="tag">{children}</span>;
 }
 
+function FitBadge({ label }) {
+  const map = { 'Strong Fit': 'strong', 'Good Fit': 'good', 'Partial Fit': 'partial', 'Poor Fit': 'poor' };
+  return <span className={`fit-badge ${map[label] || 'partial'}`}>{label}</span>;
+}
+
 function ClaimItem({ claim }) {
   const [open, setOpen] = useState(false);
-  const badgeClass = claim.email === 'email_a' ? 'badge-a' : 'badge-b';
-  const badgeLabel = claim.email === 'email_a' ? 'Email A' : 'Email B';
   return (
     <div className="claim-item">
       <div className="claim-header" onClick={() => setOpen(!open)}>
         <span className="claim-text">{claim.claim}</span>
-        <div className="claim-meta">
-          <span className={`claim-email-badge ${badgeClass}`}>{badgeLabel}</span>
-          <span className={`claim-chevron ${open ? 'open' : ''}`}>▾</span>
+        <div className="claim-right">
+          <span className={`claim-badge ${claim.email === 'email_a' ? 'a' : 'b'}`}>
+            {claim.email === 'email_a' ? 'Email A' : 'Email B'}
+          </span>
+          <span className={`chevron ${open ? 'open' : ''}`}>▾</span>
         </div>
       </div>
       <div className={`claim-evidence ${open ? 'open' : ''}`}>
         <a className="claim-url" href={claim.source_url} target="_blank" rel="noopener noreferrer">
           ↗ {claim.source_url}
         </a>
-        {claim.snippet && (
-          <div className="claim-snippet">"{claim.snippet}"</div>
-        )}
+        {claim.snippet && <div className="claim-snippet">"{claim.snippet}"</div>}
       </div>
     </div>
   );
@@ -248,33 +211,28 @@ function ClaimItem({ claim }) {
 
 function EmailCard({ email, label }) {
   const [copied, setCopied] = useState(false);
-  if (!email || !email.subject) return null;
-
+  if (!email?.subject) return null;
   const isA = label === 'A';
-  const badgeClass = isA ? 'badge-pain' : 'badge-trigger';
-  const badgeText = email.angle || (isA ? 'pain-led' : 'trigger-led');
+  const angle = email.angle || (isA ? 'pain-led' : 'trigger-led');
+  const badgeClass = angle.includes('pain') ? 'pain' : 'trigger';
 
   const copy = () => {
-    const text = `Subject: ${email.subject}\n\n${email.body}`;
-    navigator.clipboard.writeText(text).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+    navigator.clipboard.writeText(`Subject: ${email.subject}\n\n${email.body}`).then(() => {
+      setCopied(true); setTimeout(() => setCopied(false), 2000);
     });
   };
 
   return (
     <div className="email-card">
       <div className="email-card-header">
-        <span className={`email-angle-badge ${badgeClass}`}>{badgeText}</span>
+        <span className={`angle-badge ${badgeClass}`}>{angle}</span>
         <span style={{fontFamily:'var(--mono)',fontSize:'11px',color:'var(--text3)'}}>Draft {label}</span>
       </div>
       <div className="email-body">
-        <div style={{fontWeight:500,color:'var(--text)',marginBottom:'12px',fontSize:'14px'}}>
-          {email.subject}
-        </div>
+        <div className="email-subject">{email.subject}</div>
         {email.body}
       </div>
-      <div className="email-copy-btn">
+      <div className="email-footer">
         <button className="btn btn-ghost" style={{fontSize:'12px',padding:'6px 14px'}} onClick={copy}>
           {copied ? '✓ Copied' : 'Copy email'}
         </button>
@@ -283,52 +241,27 @@ function EmailCard({ email, label }) {
   );
 }
 
-function FitScoreBadge({ label }) {
-  const map = { 'Strong Fit': 'strong', 'Good Fit': 'good', 'Partial Fit': 'partial', 'Poor Fit': 'poor' };
-  return <span className={`fit-label ${map[label] || 'partial'}`}>{label}</span>;
-}
-
-function FitBar({ score }) {
-  const color = score >= 75 ? 'var(--green)' : score >= 50 ? 'var(--amber)' : 'var(--red)';
-  return (
-    <div className="fit-bar">
-      <div className="fit-bar-fill" style={{ width: `${score}%`, background: color }} />
-    </div>
-  );
-}
-
-// ── Step 1: Sender Analysis ──────────────────────────────────────────────────
+// ── Step 1 ────────────────────────────────────────────────────────────────────
 
 function SenderStep({ onComplete, senderData, setSenderData, senderUrl, setSenderUrl }) {
   const [loading, setLoading] = useState(false);
-  const [loadStep, setLoadStep] = useState(0);
-  const [error, setError] = useState('');
-
-  const loadSteps = [
-    'Mapping site structure…',
-    'Planning which pages matter…',
-    'Fetching pages via Firecrawl…',
-    'Extracting relevant snippets…',
-    'Synthesizing ICP and value prop…',
-  ];
+  const [error, setError]     = useState('');
 
   const analyze = async () => {
     if (!senderUrl.trim()) return;
-    setLoading(true); setError(''); setLoadStep(0);
-    const interval = setInterval(() => setLoadStep(s => Math.min(s + 1, loadSteps.length - 1)), 4000);
+    setLoading(true); setError('');
     try {
-      const res = await fetch(`${API}/api/analyze-sender`, {
+      const res  = await fetch(`${API}/api/analyze-sender`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: senderUrl.trim() }),
       });
-      if (!res.ok) { const e = await res.json(); throw new Error(e.detail || 'Request failed'); }
-      const data = await res.json();
-      setSenderData(data);
+      if (!res.ok) { const e = await res.json(); throw new Error(e.detail || 'Failed'); }
+      setSenderData(await res.json());
     } catch (e) {
       setError(e.message);
     } finally {
-      clearInterval(interval); setLoading(false);
+      setLoading(false);
     }
   };
 
@@ -341,42 +274,23 @@ function SenderStep({ onComplete, senderData, setSenderData, senderUrl, setSende
         <div className="field">
           <label>Company website</label>
           <input
-            type="text"
-            placeholder="artisan.co"
-            value={senderUrl}
-            onChange={e => setSenderUrl(e.target.value)}
+            type="text" placeholder="artisan.co"
+            value={senderUrl} onChange={e => setSenderUrl(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && analyze()}
           />
         </div>
         <button className="btn btn-primary" onClick={analyze} disabled={loading || !senderUrl.trim()}>
-          {loading ? <><Spinner /> Analyzing…</> : '→ Generate ICP & Value Prop'}
+          {loading ? <><Spinner /> Generating…</> : '→ Generate ICP & Value Prop'}
         </button>
       </div>
 
-      {error && <div className="error-box">⚠ {error}</div>}
+      {error && <div className="error">⚠ {error}</div>}
 
-      {loading && (
-        <div className="card">
-          <LoadingState steps={loadSteps} activeStep={loadStep} />
-        </div>
-      )}
-
-      {senderData && !loading && (
+      {senderData && (
         <div className="fade-in">
-          {senderData.cached && (
-            <div className="cache-badge">⚡ Loaded from cache — no tokens used</div>
-          )}
-
           <div className="card">
             <div className="card-title">Value Proposition</div>
-            <div className="value-prop-text">{senderData.value_proposition}</div>
-
-            {senderData.confidence && (
-              <div style={{display:'flex',gap:'8px',alignItems:'center',marginBottom:'8px'}}>
-                <span style={{fontFamily:'var(--mono)',fontSize:'11px',color:'var(--text3)'}}>Confidence:</span>
-                <Tag>{senderData.confidence}</Tag>
-              </div>
-            )}
+            <div className="value-prop">{senderData.value_proposition}</div>
           </div>
 
           <div className="card">
@@ -385,52 +299,52 @@ function SenderStep({ onComplete, senderData, setSenderData, senderUrl, setSende
               {icp.target_industries?.length > 0 && (
                 <div className="icp-field">
                   <div className="icp-field-label">Target Industries</div>
-                  <div className="icp-field-items">{icp.target_industries.map((v,i) => <Tag key={i}>{v}</Tag>)}</div>
+                  <div className="tags">{icp.target_industries.map((v,i) => <Tag key={i}>{v}</Tag>)}</div>
                 </div>
               )}
               {icp.size_bands?.length > 0 && (
                 <div className="icp-field">
                   <div className="icp-field-label">Company Size</div>
-                  <div className="icp-field-items">{icp.size_bands.map((v,i) => <Tag key={i}>{v}</Tag>)}</div>
+                  <div className="tags">{icp.size_bands.map((v,i) => <Tag key={i}>{v}</Tag>)}</div>
                 </div>
               )}
               {icp.common_triggers?.length > 0 && (
                 <div className="icp-field">
                   <div className="icp-field-label">Common Triggers</div>
-                  <div className="icp-field-items">{icp.common_triggers.map((v,i) => <Tag key={i}>{v}</Tag>)}</div>
+                  <div className="tags">{icp.common_triggers.map((v,i) => <Tag key={i}>{v}</Tag>)}</div>
                 </div>
               )}
               {icp.likely_buyers?.length > 0 && (
                 <div className="icp-field">
                   <div className="icp-field-label">Likely Buyers</div>
-                  <div className="icp-field-items">{icp.likely_buyers.map((v,i) => <Tag key={i}>{v}</Tag>)}</div>
+                  <div className="tags">{icp.likely_buyers.map((v,i) => <Tag key={i}>{v}</Tag>)}</div>
                 </div>
               )}
               {icp.pain_points?.length > 0 && (
                 <div className="icp-field">
                   <div className="icp-field-label">Pain Points</div>
-                  <div className="icp-field-items">{icp.pain_points.map((v,i) => <Tag key={i}>{v}</Tag>)}</div>
+                  <div className="tags">{icp.pain_points.map((v,i) => <Tag key={i}>{v}</Tag>)}</div>
                 </div>
               )}
               {icp.differentiators?.length > 0 && (
                 <div className="icp-field">
                   <div className="icp-field-label">Differentiators</div>
-                  <div className="icp-field-items">{icp.differentiators.map((v,i) => <Tag key={i}>{v}</Tag>)}</div>
+                  <div className="tags">{icp.differentiators.map((v,i) => <Tag key={i}>{v}</Tag>)}</div>
                 </div>
               )}
             </div>
           </div>
 
-          {senderData.pages_fetched?.length > 0 && (
+          {senderData.pages_researched?.length > 0 && (
             <div className="card">
-              <div className="card-title">Pages analyzed</div>
-              <div className="pages-fetched">
-                {senderData.pages_fetched.map((p,i) => <span key={i} className="page-tag">{p}</span>)}
+              <div className="card-title">Pages Analyzed</div>
+              <div className="page-tags">
+                {senderData.pages_researched.map((p,i) => <span key={i} className="page-tag">{p}</span>)}
               </div>
             </div>
           )}
 
-          <div style={{display:'flex',justifyContent:'flex-end',marginTop:'8px'}}>
+          <div style={{display:'flex',justifyContent:'flex-end'}}>
             <button className="btn btn-primary" onClick={onComplete}>
               Continue to outbound drafting →
             </button>
@@ -441,32 +355,19 @@ function SenderStep({ onComplete, senderData, setSenderData, senderUrl, setSende
   );
 }
 
-// ── Step 2: Target Analysis ──────────────────────────────────────────────────
+// ── Step 2 ────────────────────────────────────────────────────────────────────
 
 function TargetStep({ senderUrl, senderData }) {
   const [targetUrl, setTargetUrl] = useState('');
-  const [role, setRole] = useState('');
+  const [role, setRole]           = useState('');
   const [seniority, setSeniority] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [loadStep, setLoadStep] = useState(0);
-  const [error, setError] = useState('');
-  const [result, setResult] = useState(null);
-
-  const loadSteps = [
-    'Mapping target site…',
-    'Planning research strategy…',
-    'Fetching target pages…',
-    'Running web searches for signals…',
-    'Extracting relevant snippets…',
-    'Evaluating ICP fit…',
-    'Drafting outbound emails…',
-    'Building evidence map…',
-  ];
+  const [loading, setLoading]     = useState(false);
+  const [error, setError]         = useState('');
+  const [result, setResult]       = useState(null);
 
   const analyze = async () => {
     if (!targetUrl.trim() || !role || !seniority) return;
-    setLoading(true); setError(''); setResult(null); setLoadStep(0);
-    const interval = setInterval(() => setLoadStep(s => Math.min(s + 1, loadSteps.length - 1)), 5000);
+    setLoading(true); setError(''); setResult(null);
     try {
       const res = await fetch(`${API}/api/analyze-target`, {
         method: 'POST',
@@ -479,25 +380,25 @@ function TargetStep({ senderUrl, senderData }) {
           role, seniority,
         }),
       });
-      if (!res.ok) { const e = await res.json(); throw new Error(e.detail || 'Request failed'); }
-      const data = await res.json();
-      setResult(data);
+      if (!res.ok) { const e = await res.json(); throw new Error(e.detail || 'Failed'); }
+      setResult(await res.json());
     } catch (e) {
       setError(e.message);
     } finally {
-      clearInterval(interval); setLoading(false);
+      setLoading(false);
     }
   };
 
-  const fit = result?.fit_result || {};
+  const fit        = result?.fit_result || {};
   const scoreColor = fit.fit_score >= 75 ? 'var(--green)' : fit.fit_score >= 50 ? 'var(--amber)' : 'var(--red)';
+  const fitBadgeMap = { 'Strong Fit': 'strong', 'Good Fit': 'good', 'Partial Fit': 'partial', 'Poor Fit': 'poor' };
 
   return (
     <div>
       {senderData && (
-        <div className="card" style={{marginBottom:'20px',borderColor:'rgba(124,106,247,0.3)'}}>
-          <div className="card-title">Sender context loaded</div>
-          <div style={{fontSize:'13px',color:'var(--text2)',lineHeight:1.6}}>{senderData.value_proposition}</div>
+        <div className="context-banner">
+          <div className="context-banner-label">Sender context</div>
+          {senderData.value_proposition}
         </div>
       )}
 
@@ -505,9 +406,9 @@ function TargetStep({ senderUrl, senderData }) {
         <div className="card-title">Target Company + Persona</div>
         <div className="field">
           <label>Target company website</label>
-          <input type="text" placeholder="stripe.com" value={targetUrl} onChange={e => setTargetUrl(e.target.value)} />
+          <input type="text" placeholder="vanta.com" value={targetUrl} onChange={e => setTargetUrl(e.target.value)} />
         </div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px'}}>
+        <div className="two-col">
           <div className="field">
             <label>Recipient role</label>
             <select value={role} onChange={e => setRole(e.target.value)}>
@@ -524,57 +425,46 @@ function TargetStep({ senderUrl, senderData }) {
           </div>
         </div>
         <button className="btn btn-primary" onClick={analyze} disabled={loading || !targetUrl.trim() || !role || !seniority}>
-          {loading ? <><Spinner /> Analyzing…</> : '→ Generate Outbound Strategy'}
+          {loading ? <><Spinner /> Generating…</> : '→ Generate Outbound Strategy'}
         </button>
       </div>
 
-      {error && <div className="error-box">⚠ {error}</div>}
+      {error && <div className="error">⚠ {error}</div>}
 
-      {loading && (
-        <div className="card">
-          <LoadingState steps={loadSteps} activeStep={loadStep} />
-        </div>
-      )}
-
-      {result && !loading && (
+      {result && (
         <div className="fade-in">
-          {result.cached && (
-            <div className="cache-badge">⚡ Loaded from cache — no tokens used</div>
-          )}
 
           {/* Fit Score */}
           <div className="card">
             <div className="card-title">ICP Fit Evaluation</div>
-            <div className="fit-bar-wrap">
-              <div className="fit-header">
-                <div>
-                  <span className="fit-score" style={{color: scoreColor}}>{fit.fit_score}</span>
-                  <span style={{fontFamily:'var(--mono)',fontSize:'13px',color:'var(--text3)'}}>/100</span>
-                </div>
-                <FitScoreBadge label={fit.fit_label} />
+            <div className="fit-header">
+              <div>
+                <span className="fit-score" style={{color: scoreColor}}>{fit.fit_score}</span>
+                <span style={{fontFamily:'var(--mono)',fontSize:'13px',color:'var(--text3)'}}>/100</span>
               </div>
-              <FitBar score={fit.fit_score} />
+              <FitBadge label={fit.fit_label} />
+            </div>
+            <div className="fit-bar">
+              <div className="fit-bar-fill" style={{width:`${fit.fit_score}%`, background: scoreColor}} />
             </div>
             <div className="fit-summary">{fit.fit_summary}</div>
-
             {fit.matched_signals?.length > 0 && (
               <div className="fit-signals">
                 {fit.matched_signals.map((s,i) => (
                   <div key={i} className="fit-signal">
                     <span className="fit-signal-icon">✓</span>
                     <div>
-                      <div className="fit-signal-text">{s.signal}</div>
+                      <div style={{color:'var(--text2)'}}>{s.signal}</div>
                       {s.evidence && <div className="fit-signal-evidence">{s.evidence}</div>}
                     </div>
                   </div>
                 ))}
               </div>
             )}
-
             {fit.company_profile && (
               <>
                 <div className="divider" />
-                <div style={{display:'flex',flexWrap:'wrap',gap:'8px'}}>
+                <div className="tags">
                   {fit.company_profile.industry && <Tag>🏢 {fit.company_profile.industry}</Tag>}
                   {fit.company_profile.estimated_size && <Tag>👥 {fit.company_profile.estimated_size}</Tag>}
                   {fit.company_profile.stage && <Tag>📈 {fit.company_profile.stage}</Tag>}
@@ -584,7 +474,7 @@ function TargetStep({ senderUrl, senderData }) {
             )}
           </div>
 
-          {/* Poor fit — no emails */}
+          {/* Poor fit */}
           {!result.emails_generated && result.reason && (
             <div className="card" style={{borderColor:'rgba(248,113,113,0.3)'}}>
               <div className="card-title" style={{color:'var(--red)'}}>Emails Not Generated</div>
@@ -592,7 +482,7 @@ function TargetStep({ senderUrl, senderData }) {
             </div>
           )}
 
-          {/* Emails — only shown if fit threshold passed */}
+          {/* Emails */}
           {result.emails_generated && (
             <div className="card">
               <div className="card-title">Outbound Drafts</div>
@@ -603,24 +493,25 @@ function TargetStep({ senderUrl, senderData }) {
             </div>
           )}
 
-          {/* Claim Map */}
+          {/* Claim map */}
           {result.emails_generated && result.claim_map?.length > 0 && (
             <div className="card">
               <div className="card-title">Evidence Panel — {result.claim_map.length} claims cited</div>
               <div style={{fontSize:'12px',color:'var(--text3)',marginBottom:'16px'}}>
-                Every factual claim used in the emails. Click any row to see the source URL and supporting snippet.
+                Every factual claim used in the emails. Click any row to see the source and supporting snippet.
               </div>
               <div className="claim-map">
-                {result.claim_map.map((c, i) => <ClaimItem key={i} claim={c} />)}
+                {result.claim_map.map((c,i) => <ClaimItem key={i} claim={c} />)}
               </div>
             </div>
           )}
 
-          {(result.pages_researched || result.pages_fetched)?.length > 0 && (
+          {/* Pages researched */}
+          {result.pages_researched?.length > 0 && (
             <div className="card">
-              <div className="card-title">Pages researched</div>
-              <div className="pages-fetched">
-                {(result.pages_researched || result.pages_fetched).map((p,i) => <span key={i} className="page-tag">{p}</span>)}
+              <div className="card-title">Pages Researched</div>
+              <div className="page-tags">
+                {result.pages_researched.map((p,i) => <span key={i} className="page-tag">{p}</span>)}
               </div>
             </div>
           )}
@@ -630,42 +521,38 @@ function TargetStep({ senderUrl, senderData }) {
   );
 }
 
-// ── App Root ─────────────────────────────────────────────────────────────────
+// ── App ───────────────────────────────────────────────────────────────────────
 
 function App() {
-  const [step, setStep] = useState(0);
+  const [step, setStep]           = useState(0);
   const [senderUrl, setSenderUrl] = useState('');
   const [senderData, setSenderData] = useState(null);
 
-  const goToStep2 = () => setStep(1);
-
   return (
     <div className="app">
-      <div className="header">
-        <div className="header-eyebrow">Artisan — Applied AI Take-Home</div>
-        <h1>Outbound <span>Intelligence</span><br />Engine</h1>
-        <div className="header-sub">
-          Turn any public company website into a complete outbound strategy —
-          ICP definition, account research, and email drafts grounded in evidence.
-        </div>
+      <div className="eyebrow">Artisan — Applied AI Take-Home</div>
+      <h1>Outbound <span>Intelligence</span><br />Engine</h1>
+      <div className="subtitle">
+        Turn any public company website into a complete outbound strategy —
+        ICP definition, account research, and evidence-grounded email drafts.
       </div>
 
-      <div className="steps">
-        <button className="step-tab" class={step === 0 ? 'step-tab active' : 'step-tab'} onClick={() => setStep(0)}
-          style={step === 0 ? {background:'var(--bg3)',color:'var(--text)',border:'1px solid var(--border2)'} : {}}>
+      <div className="tabs">
+        <button className={`tab ${step === 0 ? 'active' : ''}`} onClick={() => setStep(0)}>
           01 / ICP Generation
         </button>
-        <button className="step-tab"
+        <button
+          className={`tab ${step === 1 ? 'active' : ''}`}
           onClick={() => senderData && setStep(1)}
           disabled={!senderData}
-          style={step === 1 ? {background:'var(--bg3)',color:'var(--text)',border:'1px solid var(--border2)'} : {}}>
+        >
           02 / Outbound Drafting
         </button>
       </div>
 
       {step === 0 && (
         <SenderStep
-          onComplete={goToStep2}
+          onComplete={() => setStep(1)}
           senderData={senderData}
           setSenderData={setSenderData}
           senderUrl={senderUrl}
