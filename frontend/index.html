@@ -473,6 +473,8 @@ function TargetStep({ senderUrl, senderData }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sender_url: senderUrl,
+          sender_icp: senderData?.icp || {},
+          value_prop: senderData?.value_proposition || '',
           target_url: targetUrl.trim(),
           role, seniority,
         }),
@@ -582,17 +584,27 @@ function TargetStep({ senderUrl, senderData }) {
             )}
           </div>
 
-          {/* Emails */}
-          <div className="card">
-            <div className="card-title">Outbound Drafts</div>
-            <div className="email-grid">
-              <EmailCard email={result.email_a} label="A" />
-              <EmailCard email={result.email_b} label="B" />
+          {/* Poor fit — no emails */}
+          {!result.emails_generated && result.reason && (
+            <div className="card" style={{borderColor:'rgba(248,113,113,0.3)'}}>
+              <div className="card-title" style={{color:'var(--red)'}}>Emails Not Generated</div>
+              <div style={{fontSize:'14px',color:'var(--text2)',lineHeight:1.6}}>{result.reason}</div>
             </div>
-          </div>
+          )}
+
+          {/* Emails — only shown if fit threshold passed */}
+          {result.emails_generated && (
+            <div className="card">
+              <div className="card-title">Outbound Drafts</div>
+              <div className="email-grid">
+                <EmailCard email={result.email_a} label="A" />
+                <EmailCard email={result.email_b} label="B" />
+              </div>
+            </div>
+          )}
 
           {/* Claim Map */}
-          {result.claim_map?.length > 0 && (
+          {result.emails_generated && result.claim_map?.length > 0 && (
             <div className="card">
               <div className="card-title">Evidence Panel — {result.claim_map.length} claims cited</div>
               <div style={{fontSize:'12px',color:'var(--text3)',marginBottom:'16px'}}>
@@ -604,11 +616,11 @@ function TargetStep({ senderUrl, senderData }) {
             </div>
           )}
 
-          {result.pages_fetched?.length > 0 && (
+          {(result.pages_researched || result.pages_fetched)?.length > 0 && (
             <div className="card">
-              <div className="card-title">Sources researched</div>
+              <div className="card-title">Pages researched</div>
               <div className="pages-fetched">
-                {result.pages_fetched.map((p,i) => <span key={i} className="page-tag">{p}</span>)}
+                {(result.pages_researched || result.pages_fetched).map((p,i) => <span key={i} className="page-tag">{p}</span>)}
               </div>
             </div>
           )}
