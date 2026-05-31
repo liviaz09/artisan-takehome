@@ -21,6 +21,14 @@ Cache schema per domain:
       "claim_map": [ ... ]
     }
   }
+
+Bug fixed: previously cache_set_pages() reset cached_at on every
+intermediate write, meaning a second concurrent request would find
+a partial entry (pages saved but emails not yet written) and still
+re-run the full agent loop. Now:
+  - Intermediate writes (pages) use _merge() which never touches cached_at
+  - Only the final result write stamps cached_at + sets complete=True
+  - cache_get() only returns entries that are complete=True
 """
 
 import json
@@ -29,8 +37,8 @@ from datetime import datetime, timezone
 from typing import Any
 
 CACHE_PATH = os.path.join(os.path.dirname(__file__), "..", "leads_cache.json")
-# Cache TTL: 48 hours. Stale data means stale emails.
-CACHE_TTL_HOURS = 48
+# Cache TTL: 24 hours. Stale data means stale emails.
+CACHE_TTL_HOURS = 24
 
 
 def _load() -> dict:
@@ -59,7 +67,8 @@ def _domain_key(url: str) -> str:
 def _merge(url: str, updates: dict) -> None:
     """
     Merge fields into a cache entry WITHOUT updating cached_at or complete.
-    Save changes to file mid-run so a second request doesn't mistake a partial entry for a complete one.
+    Used for intermediate writes (e.g. saving scraped pages mid-run)
+    so a second request doesn't mistake a partial entry for a complete one.
     """
     data = _load()
     key = _domain_key(url)

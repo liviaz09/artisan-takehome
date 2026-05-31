@@ -3,18 +3,22 @@ target_agent.py — Mode 2: target evaluation and outbound email drafting.
 
 Agent loop:
   1. CHECK CACHE   → return if we've already profiled this target+persona
-  2. MAP SITE      → discover target's pages
-  3. PLAN          → Claude decides pages + web searches based on ICP context
-  4. FETCH         → Firecrawl scrapes pages + searches for external signals
-  5. CHUNK+FILTER  → extract relevant snippets (fit signals, triggers, pain)
-  6. EVALUATE FIT  → Claude scores target against sender's ICP
-  7. DRAFT EMAILS  → Claude writes email A (pain-led) + B (trigger-led)
-  8. BUILD CLAIM MAP → every factual claim → source URL + snippet
-  9. CACHE WRITE   → save for future runs
+  2. MAP + SELECT  → discover target's pages, filter deterministically
+  3. FETCH         → Firecrawl scrapes pages + hardcoded web searches
+  4. CHUNK+EMBED   → RecursiveCharacterTextSplitter + text-embedding-3-small
+  5. EVALUATE FIT  → Claude scores target against sender's ICP
+  6. DRAFT EMAILS  → Claude writes email A (pain-led) + B (trigger-led)
+  7. BUILD CLAIM MAP → every factual claim → source URL + snippet
+  8. CACHE WRITE   → save for future runs
 
-The two-tool pattern:
-  Tool A: Firecrawl (live web) — for pages and web-wide signals
-  Tool B: JSON cache — for sender's ICP (already computed in Mode 1)
+What we removed vs v1:
+  - The Claude planning call (_plan_target_research) is gone.
+    We hardcode the web search queries because we already know what signals
+    matter: funding, hiring, news. Claude shouldn't decide this.
+
+  - Page selection is deterministic (select_pages), not LLM-driven.
+
+  - Research goal is a hardcoded string — we know what we're looking for.
 """
 
 import json
@@ -23,24 +27,46 @@ import anthropic
 from dotenv import load_dotenv
 
 from tools.cache import cache_get, cache_set, cache_set_pages, cache_get_pages
-from tools.firecrawl_client import map_site, scrape_pages, search_web
+from tools.firecrawl_client import map_site, scrape_pages, search_web, select_pages
 from tools.chunker import extract_relevant_snippets, format_snippets_for_prompt
-from prompts.prompts import (
-    TARGET_PLAN_PROMPT,
-    FIT_EVALUATION_PROMPT,
-    EMAIL_GENERATION_PROMPT,
-)
+from prompts.prompts import FIT_EVALUATION_PROMPT, EMAIL_GENERATION_PROMPT
 
 load_dotenv()
 
 _client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
+# Hardcoded research goal for target signal extraction.
+# These are the signals that always matter for ICP fit — no LLM needed to decide.
+TARGET_RESEARCH_GOAL = (
+    "company size, employee count, industry vertical, business model B2B or B2C, "
+    "funding stage, recent funding rounds, revenue or growth signals, "
+    "sales team existence, outbound sales motion, tech stack, "
+    "pain points, hiring signals, recent news or press releases"
+)
+
+
+def _build_web_searches(company_name: str) -> list[str]:
+    """
+    Hardcoded web search queries for external signals.
+    We know exactly what external signals matter — funding, hiring, news.
+    No LLM needed to generate these queries.
+    """
+    return [
+        f"{company_name} funding round 2024 2025",
+        f"{company_name} sales team hiring",
+        f"{company_name} recent news announcement",
+    ]
+
+
+def _extract_company_name(url: str) -> str:
+    """Best-effort company name from URL for search queries."""
+    domain = url.split("://")[-1].split("/")[0]
+    domain = domain.removeprefix("www.")
+    return domain.split(".")[0].capitalize()
+
 
 def _get_sender_icp(sender_url: str) -> dict:
-    """
-    Tool B: retrieve the sender's ICP from cache (computed in Mode 1).
-    If not cached, returns an empty dict — the agent degrades gracefully.
-    """
+    """Retrieve sender's ICP from cache (computed in Mode 1)."""
     if not sender_url.startswith("http"):
         sender_url = "https://" + sender_url
     cached = cache_get(sender_url)
@@ -52,38 +78,6 @@ def _get_sender_icp(sender_url: str) -> dict:
     return {}
 
 
-def _plan_target_research(
-    target_url: str,
-    discovered: list[str],
-    role: str,
-    seniority: str,
-    icp_summary: str,
-) -> dict:
-    """Planning step: Claude selects pages to fetch + web searches to run."""
-    prompt = TARGET_PLAN_PROMPT.format(
-        url=target_url,
-        pages=json.dumps(discovered[:30], indent=2),
-        role=role,
-        seniority=seniority,
-        icp_summary=icp_summary,
-    )
-    response = _client.messages.create(
-        model="claude-haiku-4-5",
-        max_tokens=512,
-        messages=[{"role": "user", "content": prompt}]
-    )
-    raw = response.content[0].text.strip()
-    raw = raw.replace("```json", "").replace("```", "").strip()
-    try:
-        return json.loads(raw)
-    except Exception:
-        return {
-            "pages_to_fetch": discovered[:4],
-            "web_searches": [],
-            "signals_to_find": ["Company size", "Industry", "Recent activity"],
-        }
-
-
 def _evaluate_fit(
     target_url: str,
     role: str,
@@ -91,7 +85,7 @@ def _evaluate_fit(
     icp: dict,
     snippets: list[dict],
 ) -> dict:
-    """Evaluate how well the target fits the sender's ICP."""
+    """Claude evaluates how well the target fits the sender's ICP."""
     formatted = format_snippets_for_prompt(snippets)
     prompt = FIT_EVALUATION_PROMPT.format(
         icp=json.dumps(icp, indent=2),
@@ -123,7 +117,7 @@ def _draft_emails(
     fit_result: dict,
     snippets: list[dict],
 ) -> dict:
-    """Draft two emails with different angles from the retrieved evidence."""
+    """Claude drafts two emails with different angles from retrieved evidence."""
     formatted = format_snippets_for_prompt(snippets)
     prompt = EMAIL_GENERATION_PROMPT.format(
         sender_url=sender_url,
@@ -164,9 +158,9 @@ async def analyze_target(
         target_url = "https://" + target_url
     if not sender_url.startswith("http"):
         sender_url = "https://" + sender_url
+    base = target_url.rstrip("/")
 
-    # Cache key includes persona so different roles get different emails
-    cache_persona_key = f"{role}_{seniority}".lower().replace(" ", "_")
+    cache_persona_key = f"{role}_{seniority}".lower().replace(" ", "_").replace("/", "_")
 
     # ── Step 1: Cache check ──────────────────────────────────────────────────
     cached = cache_get(target_url)
@@ -189,19 +183,13 @@ async def analyze_target(
     sender_data = _get_sender_icp(sender_url)
     icp = sender_data.get("icp", {})
     value_prop = sender_data.get("value_prop", "")
-    icp_summary = json.dumps(icp, indent=2) if icp else "ICP not yet computed for sender."
 
-    # ── Step 2: Map target site ───────────────────────────────────────────────
-    discovered = map_site(target_url, limit=20)
-    print(f"[target_agent] Discovered {len(discovered)} pages on target")
+    # ── Step 2: Map + deterministic page selection ────────────────────────────
+    discovered = map_site(target_url, limit=30)
+    pages_to_fetch = select_pages(discovered, base, mode="target", limit=5)
+    print(f"[target_agent] Selected {len(pages_to_fetch)} pages: {pages_to_fetch}")
 
-    # ── Step 3: Plan ──────────────────────────────────────────────────────────
-    plan = _plan_target_research(target_url, discovered, role, seniority, icp_summary)
-    pages_to_fetch = plan.get("pages_to_fetch", discovered[:4])
-    web_searches = plan.get("web_searches", [])
-    print(f"[target_agent] Plan: {len(pages_to_fetch)} pages + {len(web_searches)} searches")
-
-    # ── Step 4: Fetch (Tool A: Firecrawl) ────────────────────────────────────
+    # ── Step 3: Fetch pages + hardcoded web searches ──────────────────────────
     cached_pages = cache_get_pages(target_url) or {}
     pages_to_scrape = [p for p in pages_to_fetch if p not in cached_pages]
     scraped = scrape_pages(pages_to_scrape)
@@ -211,35 +199,33 @@ async def analyze_target(
         all_pages[page["url"]] = page["markdown"]
     cache_set_pages(target_url, all_pages)
 
-    # Fetch web search results for external signals
+    # Hardcoded web searches — we know what external signals matter
+    company_name = _extract_company_name(target_url)
+    search_queries = _build_web_searches(company_name)
     search_results = []
-    for query in web_searches[:3]:  # cap at 3 searches (cost control)
+    for query in search_queries:
         results = search_web(query, limit=3)
         search_results.extend(results)
-    print(f"[target_agent] Got {len(search_results)} web search results")
+    print(f"[target_agent] Got {len(search_results)} web search results for: {company_name}")
 
     # Combine site pages + search results
     page_objects = [{"url": u, "markdown": m} for u, m in all_pages.items()]
     page_objects.extend(search_results)
 
-    # ── Step 5: Chunk + filter ────────────────────────────────────────────────
-    fit_goal = (
-        f"Company size, industry, growth stage, recent funding or news, "
-        f"tech stack, pain points relevant to: {icp_summary[:300]}"
-    )
-    snippets = extract_relevant_snippets(page_objects, fit_goal, top_k=15)
-    print(f"[target_agent] Selected {len(snippets)} relevant snippets")
+    # ── Step 4: Chunk + embed + similarity ranking ────────────────────────────
+    snippets = extract_relevant_snippets(page_objects, TARGET_RESEARCH_GOAL, top_k=15)
+    print(f"[target_agent] Selected {len(snippets)} relevant snippets via embeddings")
 
-    # ── Step 6: Evaluate fit ──────────────────────────────────────────────────
+    # ── Step 5: Evaluate fit (one Claude call) ────────────────────────────────
     fit_result = _evaluate_fit(target_url, role, seniority, icp, snippets)
     print(f"[target_agent] Fit score: {fit_result.get('fit_score')} — {fit_result.get('fit_label')}")
 
-    # ── Step 7: Draft emails ──────────────────────────────────────────────────
+    # ── Step 6: Draft emails (one Claude call) ────────────────────────────────
     email_data = _draft_emails(
         sender_url, value_prop, target_url, role, seniority, fit_result, snippets
     )
 
-    # ── Step 8: Build claim map ───────────────────────────────────────────────
+    # ── Step 7: Build claim map ───────────────────────────────────────────────
     claim_map = []
     for email_key in ["email_a", "email_b"]:
         email = email_data.get(email_key, {})
@@ -252,7 +238,7 @@ async def analyze_target(
                 "snippet": claim.get("snippet", ""),
             })
 
-    # ── Step 9: Cache write ───────────────────────────────────────────────────
+    # ── Step 8: Cache write ───────────────────────────────────────────────────
     cache_set(target_url, {
         "type": "target",
         "fit_result": fit_result,

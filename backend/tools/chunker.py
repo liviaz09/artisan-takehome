@@ -1,165 +1,152 @@
 """
-chunker.py — Snippet extraction and relevance filtering.
+chunker.py — Snippet extraction using embeddings and cosine similarity.
 
-Design rationale:
-  This is the core of our token optimization strategy. The requirement says
-  "answers must be based on retrieved snippets, not full-context stuffing."
+Pipeline (corrected):
+  1. Split markdown into chunks via RecursiveCharacterTextSplitter (LangChain)
+     — battle-tested library, handles markdown structure aware splitting
+  2. Embed all chunks via OpenAI text-embedding-3-small
+     — lightweight embedding model, not an LLM, extremely cheap
+     — ~$0.00002 per 1K tokens vs ~$0.003 for Haiku
+  3. Embed the research goal (same model)
+  4. Cosine similarity between goal vector and all chunk vectors
+  5. Return top-k chunks above relevance threshold
 
-  The pattern:
-    1. Split page markdown into ~300 token chunks (≈ 1,200 chars)
-    2. Score each chunk for relevance to a goal using a CHEAP, fast Claude call
-       (haiku-class model, low max_tokens)
-    3. Return only top-k chunks to the expensive synthesis call
+Why this is correct vs the previous approach:
+  - Before: we sent chunks to Claude Haiku to score relevance — wasteful,
+    slow, and using an LLM for a task that doesn't need language reasoning
+  - Now: embedding models produce dense vectors purpose-built for semantic
+    similarity. One API call embeds everything. No LLM tokens consumed here.
+  - Claude is reserved for analysis only (ICP extraction, fit eval, emails)
 
-  This means the synthesis prompt sees ~3,000 tokens of signal, not
-  30,000 tokens of full page content. Same RAG principle as a vector DB,
-  right-sized for a local app without the embedding infrastructure.
-
-  In production: replace step 2 with cosine similarity over embeddings
-  in a vector store. The interface (goal → relevant_chunks) stays identical.
+Token cost comparison per run:
+  Before: ~2,000 tokens (Haiku) just for chunk scoring
+  After:  ~0 LLM tokens — embedding model handles it entirely
 """
 
-import re
 import os
-import anthropic
+import numpy as np
+from openai import OpenAI
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from dotenv import load_dotenv
 
 load_dotenv()
 
-_client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+_openai = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-CHUNK_SIZE_CHARS = 1200   # ~300 tokens at avg 4 chars/token
-CHUNK_OVERLAP_CHARS = 150 # overlap so we don't split mid-sentence
-MAX_CHUNKS_TO_SCORE = 40  # don't score more than this per page (cost guard)
-TOP_K_CHUNKS = 5          # chunks returned per page to synthesis
+EMBEDDING_MODEL = "text-embedding-3-small"
+CHUNK_SIZE = 400        # tokens (RecursiveCharacterTextSplitter uses chars internally)
+CHUNK_OVERLAP = 50      # token overlap between chunks
+RELEVANCE_THRESHOLD = 0.35   # minimum cosine similarity to be included
+TOP_K_DEFAULT = 10
+
+# LangChain's RecursiveCharacterTextSplitter — splits on paragraph → sentence
+# → word boundaries in order, preserving semantic coherence
+_splitter = RecursiveCharacterTextSplitter(
+    chunk_size=CHUNK_SIZE * 4,    # ~4 chars per token
+    chunk_overlap=CHUNK_OVERLAP * 4,
+    separators=["\n\n", "\n", ". ", " ", ""],
+    length_function=len,
+)
 
 
-def chunk_markdown(markdown: str, url: str) -> list[dict]:
+def _embed(texts: list[str]) -> list[list[float]]:
     """
-    Split markdown into overlapping chunks.
-    Returns list of { text, url, chunk_index } dicts.
+    Get embeddings for a list of texts using text-embedding-3-small.
+    Single API call regardless of list length — batched by OpenAI.
+    Returns list of embedding vectors.
     """
-    # Clean up excessive whitespace while preserving structure
-    text = re.sub(r'\n{3,}', '\n\n', markdown.strip())
-    text = re.sub(r' {2,}', ' ', text)
-
-    chunks = []
-    start = 0
-    idx = 0
-
-    while start < len(text):
-        end = start + CHUNK_SIZE_CHARS
-
-        # Try to break at a sentence or paragraph boundary
-        if end < len(text):
-            # Look for paragraph break first
-            para_break = text.rfind('\n\n', start, end)
-            sent_break = max(text.rfind('. ', start, end),
-                             text.rfind('! ', start, end),
-                             text.rfind('? ', start, end))
-
-            if para_break > start + CHUNK_SIZE_CHARS // 2:
-                end = para_break
-            elif sent_break > start + CHUNK_SIZE_CHARS // 2:
-                end = sent_break + 1
-
-        chunk_text = text[start:end].strip()
-        if chunk_text:
-            chunks.append({
-                "text": chunk_text,
-                "url": url,
-                "chunk_index": idx,
-            })
-            idx += 1
-
-        start = end - CHUNK_OVERLAP_CHARS
-        if start >= len(text):
-            break
-
-    return chunks
-
-
-def score_chunks_for_relevance(chunks: list[dict], goal: str) -> list[dict]:
-    """
-    Use a fast Claude call to score chunks for relevance to a goal.
-    Returns chunks sorted by relevance score, descending.
-
-    This is a single LLM call that scores all chunks at once —
-    much cheaper than one call per chunk.
-    """
-    if not chunks:
-        return []
-
-    # Cap to MAX_CHUNKS_TO_SCORE for cost control
-    chunks_to_score = chunks[:MAX_CHUNKS_TO_SCORE]
-
-    numbered = "\n\n".join(
-        f"[{i}] {c['text'][:600]}" for i, c in enumerate(chunks_to_score)
+    # OpenAI embedding API handles batches natively
+    response = _openai.embeddings.create(
+        model=EMBEDDING_MODEL,
+        input=texts,
     )
-
-    prompt = f"""You are scoring text chunks for relevance to a research goal.
-
-Goal: {goal}
-
-Chunks:
-{numbered}
-
-Return ONLY a JSON array of objects, one per chunk, in this exact format:
-[{{"index": 0, "score": 8}}, {{"index": 1, "score": 3}}, ...]
-
-Score 0-10 where 10 = highly relevant, 0 = irrelevant. No explanation."""
-
-    try:
-        response = _client.messages.create(
-            model="claude-haiku-4-5",
-            max_tokens=512,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        raw = response.content[0].text.strip()
-
-        # Parse scores
-        import json
-        # Handle potential markdown code fences
-        raw = re.sub(r'```json?\s*|\s*```', '', raw).strip()
-        scores = json.loads(raw)
-
-        score_map = {item["index"]: item["score"] for item in scores}
-        for i, chunk in enumerate(chunks_to_score):
-            chunk["relevance_score"] = score_map.get(i, 0)
-
-        return sorted(chunks_to_score, key=lambda c: c.get("relevance_score", 0), reverse=True)
-
-    except Exception as e:
-        print(f"[chunker] scoring error: {e}")
-        # Fallback: return chunks in original order with neutral score
-        for chunk in chunks_to_score:
-            chunk["relevance_score"] = 5
-        return chunks_to_score
+    return [item.embedding for item in response.data]
 
 
-def extract_relevant_snippets(pages: list[dict], goal: str, top_k: int = TOP_K_CHUNKS) -> list[dict]:
+def _cosine_similarity(vec_a: list[float], vec_b: list[float]) -> float:
+    """Cosine similarity between two vectors. Range: -1 to 1."""
+    a = np.array(vec_a)
+    b = np.array(vec_b)
+    norm_a = np.linalg.norm(a)
+    norm_b = np.linalg.norm(b)
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+    return float(np.dot(a, b) / (norm_a * norm_b))
+
+
+def chunk_pages(pages: list[dict]) -> list[dict]:
     """
-    Main entry point. Given a list of scraped pages and a research goal,
-    returns the top-k most relevant snippets across all pages.
-
-    Each snippet: { text, url, chunk_index, relevance_score }
-    These snippets — and only these — go into the synthesis LLM call.
+    Split all pages into chunks using RecursiveCharacterTextSplitter.
+    Returns list of { text, url, chunk_index }.
     """
     all_chunks = []
     for page in pages:
-        chunks = chunk_markdown(page["markdown"], page["url"])
-        all_chunks.extend(chunks)
+        markdown = page.get("markdown", "").strip()
+        url = page.get("url", "")
+        if not markdown:
+            continue
 
-    if not all_chunks:
+        texts = _splitter.split_text(markdown)
+        for i, text in enumerate(texts):
+            if text.strip():
+                all_chunks.append({
+                    "text": text.strip(),
+                    "url": url,
+                    "chunk_index": i,
+                })
+    return all_chunks
+
+
+def extract_relevant_snippets(
+    pages: list[dict],
+    goal: str,
+    top_k: int = TOP_K_DEFAULT,
+) -> list[dict]:
+    """
+    Main entry point. Given scraped pages and a research goal string,
+    returns the top-k most semantically relevant chunks.
+
+    Steps:
+      1. Chunk all pages (LangChain)
+      2. Embed chunks + goal in one batched API call (OpenAI)
+      3. Cosine similarity ranking
+      4. Return top-k above threshold
+
+    Each returned chunk: { text, url, chunk_index, relevance_score }
+    Only these chunks go into Claude for synthesis — not full pages.
+    """
+    chunks = chunk_pages(pages)
+    if not chunks:
         return []
 
-    scored = score_chunks_for_relevance(all_chunks, goal)
-    return scored[:top_k]
+    chunk_texts = [c["text"] for c in chunks]
+
+    # Embed goal + all chunks in a single batched API call
+    all_texts = [goal] + chunk_texts
+    try:
+        all_embeddings = _embed(all_texts)
+    except Exception as e:
+        print(f"[chunker] embedding error: {e}")
+        # Fallback: return first top_k chunks without scoring
+        return chunks[:top_k]
+
+    goal_embedding = all_embeddings[0]
+    chunk_embeddings = all_embeddings[1:]
+
+    # Score each chunk
+    for i, chunk in enumerate(chunks):
+        chunk["relevance_score"] = _cosine_similarity(goal_embedding, chunk_embeddings[i])
+
+    # Filter by threshold, sort by score
+    relevant = [c for c in chunks if c["relevance_score"] >= RELEVANCE_THRESHOLD]
+    relevant.sort(key=lambda c: c["relevance_score"], reverse=True)
+
+    return relevant[:top_k]
 
 
 def format_snippets_for_prompt(snippets: list[dict]) -> str:
     """
-    Format snippets for injection into a synthesis prompt.
+    Format snippets for injection into Claude synthesis prompts.
     Each snippet tagged with its source URL for claim mapping.
     """
     lines = []

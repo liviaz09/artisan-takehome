@@ -2,76 +2,17 @@
 prompts.py — All LLM prompts in one place.
 
 Design rationale:
-  Centralizing prompts makes them easy to iterate on, version, and discuss
-  in the review. Each prompt has a clear role, tone, constraints, and
-  output format — no few-shot examples (which would kill email variability).
+  Only three prompts remain — one per Claude call in the system.
+  Planning and page selection are handled deterministically in code;
+  Claude is reserved for tasks that actually require language reasoning:
+  ICP synthesis, fit evaluation, and email drafting.
 
-  Prompt structure per call:
+  Prompt structure:
     Role        → who Claude is in this context
     Goal        → specific task
-    Constraints → what NOT to do (as important as what to do)
-    Format      → exact output shape (JSON schema described inline)
+    Constraints → what NOT to do
+    Format      → exact JSON output shape
 """
-
-# ---------------------------------------------------------------------------
-# PLANNING PROMPTS
-# ---------------------------------------------------------------------------
-
-SENDER_PLAN_PROMPT = """You are a B2B market intelligence agent planning a research task.
-
-Given a company's website, identify the most valuable pages to scrape to understand:
-1. What the company sells and to whom
-2. Their value proposition and differentiation  
-3. Evidence of their ideal customer (case studies, testimonials, customer logos)
-4. Pricing signals (which segments they target)
-
-Website: {url}
-Discovered pages: {pages}
-
-Return ONLY valid JSON (no markdown, no explanation):
-{{
-  "pages_to_fetch": ["url1", "url2"],
-  "research_goals": [
-    "Understand core product and value proposition",
-    "Identify target customer segments",
-    "Find ICP signals from case studies and testimonials"
-  ]
-}}
-
-Select at most 6 pages. Prioritize: homepage, /about, /customers or /case-studies, /pricing, /product."""
-
-
-TARGET_PLAN_PROMPT = """You are a B2B sales intelligence agent planning account research.
-
-Given a target company's website and a recipient persona, identify:
-1. What the company does and their industry
-2. Company size signals (team pages, job postings, funding)
-3. Tech stack or tooling signals
-4. Recent triggers: funding, launches, hiring surges, leadership changes
-5. Pain points relevant to the sender's ICP
-
-Website: {url}
-Discovered pages: {pages}
-Recipient persona: {role} ({seniority})
-Sender ICP context: {icp_summary}
-
-Return ONLY valid JSON (no markdown, no explanation):
-{{
-  "pages_to_fetch": ["url1", "url2"],
-  "web_searches": [
-    "{{company name}} funding 2024",
-    "{{company name}} recent news"
-  ],
-  "signals_to_find": [
-    "Company size and growth stage",
-    "Industry and sub-vertical",
-    "Recent business triggers",
-    "Tech stack or tooling"
-  ]
-}}
-
-Select at most 5 pages and at most 3 web searches."""
-
 
 # ---------------------------------------------------------------------------
 # MODE 1: ICP + VALUE PROPOSITION
