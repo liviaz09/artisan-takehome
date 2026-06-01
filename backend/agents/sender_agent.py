@@ -8,12 +8,30 @@ Returns a dict when the agent calls finish().
 import json
 import os
 import anthropic
-from typing import Callable
 from dotenv import load_dotenv
+from pydantic import BaseModel, ValidationError
 
 from tools.definitions import SENDER_TOOLS
 from tools.implementations import scrape_page, search_web
 from prompts.prompts import SENDER_SYSTEM_PROMPT
+
+
+# ── Pydantic models ───────────────────────────────────────────────────────────
+# Validates and structures the output from Claude's finish() call.
+# Raises ValidationError immediately if Claude returns the wrong shape
+# instead of letting bad data flow silently through the app.
+
+class ICP(BaseModel):
+    target_industries: list[str]
+    size_bands:        list[str]
+    common_triggers:   list[str]
+    likely_buyers:     list[str]
+    pain_points:       list[str]
+    differentiators:   list[str]
+
+class SenderResult(BaseModel):
+    value_proposition: str
+    icp:               ICP
 
 load_dotenv()
 
@@ -89,12 +107,21 @@ async def analyze_sender(url: str) -> dict:
                 tool_use_id = block.id
 
                 if tool_name == "finish":
-                    return {
-                        "value_proposition": tool_inputs.get("value_proposition", ""),
-                        "icp":               tool_inputs.get("icp", {}),
-                        "pages_researched":  pages_researched,
-                        "iterations":        iterations,
-                    }
+                    try:
+                        result = SenderResult(**tool_inputs)
+                        return {
+                            **result.model_dump(),
+                            "pages_researched": pages_researched,
+                            "iterations":       iterations,
+                        }
+                    except ValidationError as e:
+                        return {
+                            "value_proposition": tool_inputs.get("value_proposition", ""),
+                            "icp":               tool_inputs.get("icp", {}),
+                            "pages_researched":  pages_researched,
+                            "iterations":        iterations,
+                            "validation_error":  str(e),
+                        }
 
                 if tool_name == "scrape_page":
                     pages_researched.append(tool_inputs.get("url", ""))

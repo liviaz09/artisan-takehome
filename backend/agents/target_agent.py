@@ -11,10 +11,41 @@ import json
 import os
 import anthropic
 from dotenv import load_dotenv
+from pydantic import BaseModel, ValidationError
+from typing import Optional
 
 from tools.definitions import TARGET_TOOLS
 from tools.implementations import scrape_page, search_web
 from prompts.prompts import TARGET_SYSTEM_PROMPT, EMAIL_GENERATION_PROMPT
+
+
+# ── Pydantic models ───────────────────────────────────────────────────────────
+
+class MatchedSignal(BaseModel):
+    signal:     str
+    evidence:   str
+    source_url: str
+
+class CompanyProfile(BaseModel):
+    name:             str
+    industry:         str
+    estimated_size:   str
+    stage:            str
+    recent_triggers:  list[str] = []
+    tech_signals:     list[str] = []
+
+class EvidenceSnippet(BaseModel):
+    text:       str
+    source_url: str
+
+class TargetResult(BaseModel):
+    fit_score:         int
+    fit_label:         str
+    fit_summary:       str
+    matched_signals:   list[MatchedSignal]
+    gap_signals:       list[str]
+    company_profile:   CompanyProfile
+    evidence_snippets: list[EvidenceSnippet] = []
 
 load_dotenv()
 
@@ -150,18 +181,33 @@ async def analyze_target(
                 tool_use_id = block.id
 
                 if tool_name == "finish":
-                    fit_score  = tool_inputs.get("fit_score", 0)
-                    fit_result = tool_inputs
+                    # Validate finish() output with Pydantic
+                    try:
+                        fit_result = TargetResult(**tool_inputs)
+                    except ValidationError as e:
+                        print(f"[target_agent] finish() validation error: {e}")
+                        fit_result = TargetResult(
+                            fit_score=tool_inputs.get("fit_score", 0),
+                            fit_label=tool_inputs.get("fit_label", "Unknown"),
+                            fit_summary=tool_inputs.get("fit_summary", ""),
+                            matched_signals=[],
+                            gap_signals=[],
+                            company_profile=CompanyProfile(
+                                name="", industry="", estimated_size="", stage=""
+                            ),
+                        )
+
+                    fit_score = fit_result.fit_score
 
                     # Hard threshold — business rule in code, not in the agent
                     if fit_score < FIT_THRESHOLD:
                         return {
-                            "fit_result":       fit_result,
+                            "fit_result":       fit_result.model_dump(),
                             "emails_generated": False,
                             "reason": (
                                 f"Target scored {fit_score}/100 — below the "
                                 f"{FIT_THRESHOLD} threshold for email generation. "
-                                f"{fit_result.get('fit_summary', '')}"
+                                f"{fit_result.fit_summary}"
                             ),
                             "pages_researched": pages_researched,
                             "iterations":       iterations,
@@ -173,7 +219,7 @@ async def analyze_target(
                         target_url=target_url,
                         role=role,
                         seniority=seniority,
-                        fit_result=fit_result,
+                        fit_result=fit_result.model_dump(),
                     )
 
                     claim_map = []
@@ -189,7 +235,7 @@ async def analyze_target(
                             })
 
                     return {
-                        "fit_result":       fit_result,
+                        "fit_result":       fit_result.model_dump(),
                         "email_a":          email_data.get("email_a", {}),
                         "email_b":          email_data.get("email_b", {}),
                         "claim_map":        claim_map,
