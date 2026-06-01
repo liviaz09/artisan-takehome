@@ -40,7 +40,7 @@
     .app { max-width: 960px; margin: 0 auto; padding: 48px 24px 80px; }
 
     /* Header */
-    .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; color: var(--accent); text-transform: uppercase; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+    .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.12em; color: var(--accent); text-transform: uppercase; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
     .eyebrow::before { content: ''; display: block; width: 24px; height: 1px; background: var(--accent); }
     h1 { font-size: clamp(28px, 4vw, 42px); font-weight: 300; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 12px; }
     h1 span { color: var(--accent2); font-weight: 500; }
@@ -88,7 +88,7 @@
     .icp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
     @media (max-width: 600px) { .icp-grid { grid-template-columns: 1fr; } }
     .icp-field { background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
-    .icp-field-label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; color: var(--text3); text-transform: uppercase; margin-bottom: 10px; }
+    .icp-field-label { font-family: var(--mono); font-size: 12px; letter-spacing: 0.1em; color: var(--text2); text-transform: uppercase; margin-bottom: 10px; }
     .tags { display: flex; flex-wrap: wrap; gap: 6px; }
     .tag { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 12px; background: var(--bg2); border: 1px solid var(--border2); color: var(--text2); }
 
@@ -106,7 +106,7 @@
     .fit-signals { display: flex; flex-direction: column; gap: 8px; }
     .fit-signal { display: flex; gap: 10px; font-size: 13px; }
     .fit-signal-icon { color: var(--green); flex-shrink: 0; }
-    .fit-signal-evidence { font-family: var(--mono); font-size: 11px; color: var(--text3); margin-top: 2px; }
+    .fit-signal-evidence { font-family: var(--mono); font-size: 12px; color: var(--text2); margin-top: 2px; }
     .divider { height: 1px; background: var(--border); margin: 20px 0; }
 
     /* Emails */
@@ -114,7 +114,7 @@
     @media (max-width: 680px) { .email-grid { grid-template-columns: 1fr; } }
     .email-card { background: var(--bg3); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
     .email-card-header { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
-    .angle-badge { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; padding: 3px 8px; border-radius: 4px; }
+    .angle-badge { font-family: var(--mono); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; padding: 3px 8px; border-radius: 4px; }
     .angle-badge.pain    { background: rgba(248,113,113,0.12); color: var(--red); border: 1px solid rgba(248,113,113,0.25); }
     .angle-badge.trigger { background: rgba(251,191,36,0.12); color: var(--amber); border: 1px solid rgba(251,191,36,0.25); }
     .email-body { padding: 18px; font-size: 13px; line-height: 1.75; color: var(--text2); white-space: pre-wrap; }
@@ -128,24 +128,24 @@
     .claim-header:hover { background: var(--bg2); }
     .claim-text { font-size: 13px; color: var(--text); line-height: 1.5; }
     .claim-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-    .claim-badge { font-family: var(--mono); font-size: 10px; padding: 2px 7px; border-radius: 3px; }
+    .claim-badge { font-family: var(--mono); font-size: 12px; padding: 2px 7px; border-radius: 3px; }
     .claim-badge.a { background: rgba(124,106,247,0.15); color: var(--accent2); border: 1px solid rgba(124,106,247,0.3); }
     .claim-badge.b { background: rgba(251,191,36,0.12); color: var(--amber); border: 1px solid rgba(251,191,36,0.25); }
     .chevron { color: var(--text3); font-size: 12px; transition: transform 0.2s; }
     .chevron.open { transform: rotate(180deg); }
     .claim-evidence { border-top: 1px solid var(--border); padding: 14px 16px; display: none; flex-direction: column; gap: 10px; }
     .claim-evidence.open { display: flex; }
-    .claim-url { font-family: var(--mono); font-size: 11px; color: var(--accent); text-decoration: none; word-break: break-all; }
+    .claim-url { font-family: var(--mono); font-size: 12px; color: var(--accent); text-decoration: none; word-break: break-all; }
     .claim-url:hover { text-decoration: underline; }
-    .claim-snippet { font-size: 12px; color: var(--text3); line-height: 1.6; font-style: italic; border-left: 2px solid var(--border2); padding-left: 12px; }
+    .claim-snippet { font-size: 12px; color: var(--text2); line-height: 1.6; font-style: italic; border-left: 2px solid var(--border2); padding-left: 12px; }
 
     /* Pages */
     .page-tags { display: flex; flex-wrap: wrap; gap: 6px; }
-    .page-tag { font-family: var(--mono); font-size: 10px; padding: 2px 8px; border-radius: 4px; background: var(--bg3); border: 1px solid var(--border); color: var(--text3); word-break: break-all; }
+    .page-tag { font-family: var(--mono); font-size: 12px; padding: 2px 8px; border-radius: 4px; background: var(--bg3); border: 1px solid var(--border); color: var(--text2); word-break: break-all; }
 
     /* Sender context banner */
     .context-banner { background: var(--bg2); border: 1px solid rgba(124,106,247,0.3); border-radius: 12px; padding: 16px 20px; margin-bottom: 20px; font-size: 13px; color: var(--text2); line-height: 1.6; }
-    .context-banner-label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; color: var(--accent); text-transform: uppercase; margin-bottom: 6px; }
+    .context-banner-label { font-family: var(--mono); font-size: 12px; letter-spacing: 0.1em; color: var(--accent); text-transform: uppercase; margin-bottom: 6px; }
 
     /* Misc */
     .fade-in { animation: fadeIn 0.3s ease; }
@@ -226,7 +226,7 @@ function EmailCard({ email, label }) {
     <div className="email-card">
       <div className="email-card-header">
         <span className={`angle-badge ${badgeClass}`}>{angle}</span>
-        <span style={{fontFamily:'var(--mono)',fontSize:'11px',color:'var(--text3)'}}>Draft {label}</span>
+        <span style={{fontFamily:'var(--mono)',fontSize:'12px',color:'var(--text2)'}}>Draft {label}</span>
       </div>
       <div className="email-body">
         <div className="email-subject">{email.subject}</div>
@@ -275,16 +275,27 @@ function SenderStep({ onComplete, senderData, setSenderData, senderUrl, setSende
           <label>Company website</label>
           <input
             type="text" placeholder="artisan.co"
-            value={senderUrl} onChange={e => setSenderUrl(e.target.value)}
+            value={senderUrl} onChange={e => {setSenderUrl(e.target.value); setResult(null);}}
             onKeyDown={e => e.key === 'Enter' && analyze()}
+            disabled={loading}
           />
         </div>
         <button className="btn btn-primary" onClick={analyze} disabled={loading || !senderUrl.trim()}>
-          {loading ? <><Spinner /> Generating…</> : '→ Generate ICP & Value Prop'}
+          {loading ? <>Generating…</> : '→ Generate ICP & Value Prop'}
         </button>
       </div>
 
       {error && <div className="error">⚠ {error}</div>}
+
+      {loading && (
+        <div className="card fade-in" style={{display:'flex',alignItems:'center',gap:'16px',padding:'24px 28px'}}>
+          <Spinner />
+          <div>
+            <div style={{fontSize:'14px',fontWeight:500,color:'var(--text)',marginBottom:'4px'}}>Generating…</div>
+            <div style={{fontSize:'12px',color:'var(--text3)',fontFamily:'var(--mono)'}}>Researching company pages and extracting ICP</div>
+          </div>
+        </div>
+      )}
 
       {senderData && (
         <div className="fade-in">
@@ -406,30 +417,40 @@ function TargetStep({ senderUrl, senderData }) {
         <div className="card-title">Target Company + Persona</div>
         <div className="field">
           <label>Target company website</label>
-          <input type="text" placeholder="vanta.com" value={targetUrl} onChange={e => setTargetUrl(e.target.value)} />
+          <input type="text" placeholder="vanta.com" value={targetUrl} onChange={e => { setTargetUrl(e.target.value); setResult(null);}} disabled={loading} />
         </div>
         <div className="two-col">
           <div className="field">
             <label>Recipient role</label>
-            <select value={role} onChange={e => setRole(e.target.value)}>
+            <select value={role} onChange={e => { setRole(e.target.value); setResult(null); }}>
               <option value="">Select role…</option>
               {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
             </select>
           </div>
           <div className="field">
             <label>Seniority</label>
-            <select value={seniority} onChange={e => setSeniority(e.target.value)}>
+            <select value={seniority} onChange={e => { setSeniority(e.target.value); setResult(null); }}>
               <option value="">Select seniority…</option>
               {SENIORITIES.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
         </div>
         <button className="btn btn-primary" onClick={analyze} disabled={loading || !targetUrl.trim() || !role || !seniority}>
-          {loading ? <><Spinner /> Generating…</> : '→ Generate Outbound Strategy'}
+          {loading ? <>Generating…</> : '→ Generate Outbound Strategy'}
         </button>
       </div>
 
       {error && <div className="error">⚠ {error}</div>}
+
+      {loading && (
+        <div className="card fade-in" style={{display:'flex',alignItems:'center',gap:'16px',padding:'24px 28px'}}>
+          <Spinner />
+          <div>
+            <div style={{fontSize:'14px',fontWeight:500,color:'var(--text)',marginBottom:'4px'}}>Generating…</div>
+            <div style={{fontSize:'12px',color:'var(--text3)',fontFamily:'var(--mono)'}}>Researching target company, evaluating fit, and drafting emails</div>
+          </div>
+        </div>
+      )}
 
       {result && (
         <div className="fade-in">
@@ -440,7 +461,7 @@ function TargetStep({ senderUrl, senderData }) {
             <div className="fit-header">
               <div>
                 <span className="fit-score" style={{color: scoreColor}}>{fit.fit_score}</span>
-                <span style={{fontFamily:'var(--mono)',fontSize:'13px',color:'var(--text3)'}}>/100</span>
+                <span style={{fontFamily:'var(--mono)',fontSize:'13px',color:'var(--text2)'}}>/100</span>
               </div>
               <FitBadge label={fit.fit_label} />
             </div>
@@ -497,7 +518,7 @@ function TargetStep({ senderUrl, senderData }) {
           {result.emails_generated && result.claim_map?.length > 0 && (
             <div className="card">
               <div className="card-title">Evidence Panel — {result.claim_map.length} claims cited</div>
-              <div style={{fontSize:'12px',color:'var(--text3)',marginBottom:'16px'}}>
+              <div style={{fontSize:'12px',color:'var(--text2)',marginBottom:'16px'}}>
                 Every factual claim used in the emails. Click any row to see the source and supporting snippet.
               </div>
               <div className="claim-map">
@@ -530,11 +551,10 @@ function App() {
 
   return (
     <div className="app">
-      <div className="eyebrow">Artisan — Applied AI Take-Home</div>
-      <h1>Outbound <span>Intelligence</span><br />Engine</h1>
+      <div className="eyebrow">Livia Zalilla</div>
+      <h1>Outbound <span>Intelligence </span>Engine</h1>
       <div className="subtitle">
-        Turn any public company website into a complete outbound strategy —
-        ICP definition, account research, and evidence-grounded email drafts.
+        Turn any public company website into a complete outbound strategy.
       </div>
 
       <div className="tabs">
