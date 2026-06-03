@@ -1,7 +1,7 @@
 # Outbound Intelligence Engine
 ### Artisan Applied AI Take-Home
 
-A web app that turns any public company website into a complete outbound strategy — ICP definition, account research, fit evaluation, and evidence-grounded email drafts.
+A web app that turns any public company website into a complete outbound strategy, includes ICP definition, account research, fit evaluation, and evidence-grounded email drafts.
 
 ---
 
@@ -37,7 +37,7 @@ Navigate to **http://localhost:8000**
 
 **Step 1 — ICP Generation**
 
-Enter the sender company's website (e.g. `artisan.co`). The agent researches their public pages and produces a value proposition and structured ICP — target industries, company size bands, common triggers, likely buyers, pain points, and differentiators.
+Enter the sender company's website (e.g. `artisan.co`). The agent researches their public pages and produces a value proposition and structured ICP: target industries, company size bands, common triggers, likely buyers, pain points, and differentiators.
 
 **Step 2 — Outbound Drafting**
 
@@ -84,7 +84,7 @@ After the target agent calls `finish()`, the fit score is checked against a hard
 ## Design decisions
 
 **Why Jina AI Reader instead of Firecrawl:**
-Jina is free with no quota limits — prefix any URL with `r.jina.ai/` and get clean markdown back. No API key required. In production, Firecrawl or a similar service would give higher reliability on complex JS-heavy sites.
+Jina is free with no quota limits, prefix any URL with `r.jina.ai/` and get clean markdown back. No API key required. In production, Firecrawl or a similar service would give higher reliability on complex JS-heavy sites.
 
 **Why DuckDuckGo instead of a search API:**
 Every search API worth using has either a cost or a tight free tier. DuckDuckGo's HTML endpoint requires no authentication and has no limits. In production this would be replaced with a proper search API for cleaner structured results.
